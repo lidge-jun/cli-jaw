@@ -108,4 +108,26 @@ test('API Smoke Tests', async (t) => {
         });
         assert.ok([400, 401, 403].includes(res.status), `expected rejection, got ${res.status}`);
     });
+
+    // The Code surface had no integration coverage at all: the unit tests mount
+    // the routes over a fake service, and the workbench test needs a browser and
+    // a built Manager, so neither runs on the PR admission path. These two are
+    // the cheapest real HTTP calls that prove the router is mounted and the host
+    // answers on a server the CI job actually started.
+    await t.test('SMOKE-013: GET /api/code/models → 200 + provider catalog', async () => {
+        const res = await fetch(`${BASE}/api/code/models`);
+        assert.equal(res.status, 200);
+        const data = await res.json();
+        assert.equal(data.ok, true);
+        assert.ok(data.providers, 'no provider catalog in the response');
+        assert.equal(typeof data.defaultProvider, 'string');
+    });
+
+    await t.test('SMOKE-014: GET /api/code/sessions → 200 + paged list', async () => {
+        const res = await fetch(`${BASE}/api/code/sessions?scope=all&limit=1`);
+        assert.equal(res.status, 200);
+        const data = await res.json();
+        assert.equal(data.ok, true);
+        assert.ok(Array.isArray(data.sessions), 'sessions should be an array');
+    });
 });
