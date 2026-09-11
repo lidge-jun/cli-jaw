@@ -24,6 +24,7 @@ let collectObserver = () => {};
 const sent: string[] = [];
 const sentRequests: Array<Record<string, any>> = [];
 const anchors: unknown[][] = [];
+let employeeRunMeta: Record<string, unknown> | undefined;
 const employee = { id: 'emp-1', name: 'reviewer', cli: 'codex', model: null, role: 'reviewer' };
 
 mock.module(collectUrl, { namedExports: {
@@ -59,7 +60,12 @@ mock.module(registryUrl, { namedExports: {
     failWorker: () => undefined,
     hasPendingWorkerReplays: () => false,
 } });
-mock.module(distributeUrl, { namedExports: { ...realDistribute, runSingleAgent: async () => ({ text: 'status: ok\nsummary: employee complete', tools: [] }) } });
+mock.module(distributeUrl, { namedExports: { ...realDistribute,
+    runSingleAgent: async (...args: unknown[]) => {
+        employeeRunMeta = args[4] as Record<string, unknown> | undefined;
+        return { text: 'status: ok\nsummary: employee complete', tools: [] };
+    },
+} });
 
 const {
     decideHeartbeatReport,
@@ -186,7 +192,8 @@ test('script runner maps a real nonzero exit to failed', async () => {
 // Timeout configuration remains a source-contract assertion: waiting ten real minutes is not an acceptable unit test.
 test('script runner configures the audited timeout and output bound', async () => {
     const source = await import('node:fs').then(fs => fs.readFileSync(new URL('../../src/memory/heartbeat.ts', import.meta.url), 'utf8'));
-    assert.match(source, /timeout: 10 \* 60_000, maxBuffer: 64 \* 1024/);
+    assert.ok(source.includes('timeout: 10 * 60_000'));
+    assert.ok(source.includes('maxBuffer: 64 * 1024'));
 });
 
 // ─── destination routing (#437) ─────────────────────
@@ -339,6 +346,7 @@ test('planner-only retry receives a fresh destination grant and releases both', 
 
 for (const runner of ['employee', 'script'] as const) {
     test(`${runner} runner is covered by the same destination guard`, async () => {
+        employeeRunMeta = undefined;
         let reserved = 0;
         let released = 0;
         await runHeartbeatJob({
@@ -348,7 +356,7 @@ for (const runner of ['employee', 'script'] as const) {
             runner,
             ...(runner === 'employee' ? { employee: employee.name } : {
                 command: [process.execPath, '-e',
-                    "console.log('status: ok\\nchanged: no\\nsummary: script complete')"],
+                    "if(!process.env.JAW_SLACK_TURN_GRANT)process.exit(2);console.log('status: ok\\nchanged: no\\nsummary: script complete')"],
             }),
             schedule: { minutes: 5 },
             prompt: 'check',
@@ -359,9 +367,16 @@ for (const runner of ['employee', 'script'] as const) {
                 reserved++;
                 return () => { released++; };
             },
+            ...(runner === 'script' ? { activateDestinationGrant: () => 'fixture-grant' } : {}),
         });
         assert.equal(reserved, 1);
         assert.equal(released, 1);
+        if (runner === 'employee') {
+            assert.equal(employeeRunMeta?.['origin'], 'heartbeat');
+            assert.equal(employeeRunMeta?.['scopeKey'], 'default');
+            assert.ok(employeeRunMeta?.['requestId']);
+            assert.equal((employeeRunMeta?.['target'] as { targetId?: string } | undefined)?.targetId, 'C_REPORTS');
+        }
     });
 }
 

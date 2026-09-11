@@ -1460,6 +1460,16 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     const envDefaultsCli = cli;
     const cliEnv = applyCliEnvDefaults(envDefaultsCli, opts.env);
     const spawnEnv = makeCleanEnv(cliEnv);
+    // Capture a request grant before ANY runtime branch acquires or launches a
+    // process. Scheduled work also permits employee runtimes: its server-owned
+    // grant is narrower than their ordinary credentials and is the only way
+    // they may address Slack during this assignment.
+    const slackToolGrantEligible = origin === 'heartbeat'
+        || (!isEmployee && ['cursor', 'claude', 'codex', 'grok'].includes(cli));
+    const slackToolGrant = slackToolGrantEligible
+        ? activateSlackToolGrant(opts.requestId, scopeKey, chatSessionId)
+        : undefined;
+    if (slackToolGrant) spawnEnv[SLACK_TOOL_GRANT_ENV] = slackToolGrant;
     const bucketRow = currentBucket ? getSessionBucket.get(currentBucket) as SessionBucketRow | undefined : null;
     const bucketSessionId = bucketRow?.session_id || null;
     const bucketModel = typeof bucketRow?.model === 'string' ? bucketRow.model : null;
@@ -1789,7 +1799,8 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 prompt: { text: withSteerContext(withHistoryPrompt(prompt, historyBlock), opts.steerContext), ...(opts.images ? { images: opts.images } : {}) },
                 audience: traceAudience, liveScope: effectiveLiveScope, parentLiveScope: parentLiveScopeForChild,
                 ...(opts.runtimeParentItemId ? { parentItemId: opts.runtimeParentItemId } : {}),
-                storedSessionId: resumeSessionId, fresh: forceNew || opts._skipResume === true || isEmployee,
+                storedSessionId: resumeSessionId,
+                fresh: forceNew || opts._skipResume === true || isEmployee || Boolean(slackToolGrant),
                 cleanupUnleased: cleanupClaudeWorker,
                 isCurrent: ownedRun, isCurrentOwner: token => isCurrentSessionOwner(token, scopeKey), consumeKillReason,
                 activity: identity => opts.lifecycle?.onActivity?.('native-runtime', identity),
@@ -1977,7 +1988,10 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                     key: { scopeKey, cwd: nativeCwd, model: runtimeModel === 'default' ? '' : runtimeModel, effort, permissions },
                     binary: detected.path || (grok ? 'grok' : 'cursor-agent'), env: spawnEnv, promptTimeoutMs: resolvedAgyPrintTimeoutMs,
                     persistenceOwner, isCurrentOwner: token => isCurrentSessionOwner(token, scopeKey), canAcquire: ownsRun,
-                    storedSessionId: resumeSessionId, forceNew, signal,
+                    storedSessionId: resumeSessionId,
+                    forceNew: forceNew || Boolean(slackToolGrant),
+                    ...(slackToolGrant ? { lifetime: 'request' as const } : {}),
+                    signal,
                 });
                 facade = new AcpRuntimeSession(lease.session, { provider: cli, deferTurnEnd: true,
                     ...(grok ? grokMainOptions : { createReplacement: io => new AcpReplacement(io), prepareReplacement }),
@@ -2777,9 +2791,10 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 profileFp,
             },
             piSettings: pi,
+            env: spawnEnv,
             storedSessionId: piSessionId || null,
             instructions: piSysPrompt,
-            forceNew,
+            forceNew: forceNew || Boolean(slackToolGrant),
         }).then((lease) => {
             mainRun!.starting = false;
             if (activeMainProcesses.get(scopeKey) !== mainRun || !isCurrentSessionOwner(persistenceOwner, scopeKey)) {
@@ -3270,7 +3285,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                         },
                         storedThreadId: resumeSessionId || null,
                         instructions: sysPrompt,
-                        forceNew,
+                        forceNew: forceNew || Boolean(slackToolGrant),
                     });
                     return { kind: 'lease', lease };
                 }
@@ -3332,7 +3347,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                             bucketKey: currentBucket!,
                             storedThreadId: resumeSessionId || null,
                             instructions: sysPrompt,
-                            forceNew,
+                            forceNew: forceNew || Boolean(slackToolGrant),
                             waitMs: deadlineAt - Date.now(),
                         }), (lateLease) => { lateLease.release(); });
                         if (acquireWasCancelled()) {
@@ -3470,9 +3485,6 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     }
     // The snapshot has to predate the child; the helper owns that ordering (073 §2.4).
     const kiroPlainText = isKiroPlainTextCli(cli, effectiveProvider);
-    const slackToolGrant = !isEmployee && ['cursor', 'claude', 'codex', 'grok'].includes(cli)
-        ? activateSlackToolGrant(opts.requestId, scopeKey, chatSessionId) : undefined;
-    if (slackToolGrant) launchEnv[SLACK_TOOL_GRANT_ENV] = slackToolGrant;
     const { child, kiroConversationIdsBefore, kiroSpawnStartedAt } = spawnWithKiroSnapshot({
         kiroPlainText,
         isFreshMainRun: !isResume && !empSid,

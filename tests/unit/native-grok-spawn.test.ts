@@ -22,7 +22,7 @@ const nativeId='private-grok-native', setup={sessionId:nativeId,models:{currentM
 let promptId, secret='', badCancel=false;
 const update=u=>send({jsonrpc:'2.0',method:'session/update',params:{sessionId:nativeId,update:u}});
 const text=(value,id)=>update({sessionUpdate:'agent_message_chunk',messageId:id,content:{type:'text',text:value}});
-log({kind:'spawn',pid:process.pid,argv:process.argv.slice(2)});
+log({kind:'spawn',pid:process.pid,argv:process.argv.slice(2),grant:Boolean(process.env.JAW_SLACK_TURN_GRANT)});
 for await(const line of readline.createInterface({input:process.stdin})) {
  const r=JSON.parse(line),reply=result=>send({jsonrpc:'2.0',id:r.id,result});log(r);
  if(r.method==='initialize') reply({protocolVersion:1,agentCapabilities:{loadSession:true},authMethods:[{id:'cached_token'}]});
@@ -80,6 +80,7 @@ const { bumpScopeSessionGeneration } = await import('../../src/agent/session-per
 const { AcpRuntimeSession } = await import('../../src/agent/runtime/acp/runtime-session.ts');
 const { isNativeAdapterImplemented, isNativeWorkerImplemented } = await import('../../src/agent/runtime/selection.ts');
 const { admitRequest, pendingRequestIds, settleAllPending } = await import('../../src/orchestrator/request-registry.ts');
+const { reserveSlackToolGrant, slackCredentialKey } = await import('../../src/slack/tool-context.ts');
 const { createChatSession, setActiveChatSession } = await import('../../src/core/chat-sessions.ts');
 let serial = 0;
 test.beforeEach(t => {
@@ -165,6 +166,33 @@ test('actual Grok main emits final-only output, canonical usage and reuses nativ
         assert.deepEqual(wire()[0]!['argv'], ['agent', '--no-leader', '--always-approve', 'stdio']);
         assert.equal(wire().filter(e => e['method'] === 'authenticate')[0]!['params'].methodId, 'cached_token');
     } finally { off(); }
+});
+
+test('heartbeat native Grok launches request-lifetime with its destination grant in env', { timeout: 5000 }, async () => {
+    const opts = options();
+    const target: RemoteTarget = {
+        channel: 'slack',
+        targetKind: 'channel',
+        peerKind: 'channel',
+        targetId: 'C1HEART',
+        threadId: '1.001',
+    };
+    Object.assign(opts, { origin: 'heartbeat', target });
+    assert.equal(reserveSlackToolGrant({
+        teamId: 'T1HEART',
+        actorId: 'U1HEART',
+        destination: target,
+        credentialKey: slackCredentialKey('xoxb-fixture'),
+        enforceDestination: true,
+    }, {
+        requestId: opts.requestId,
+        scope: opts.scopeKey,
+        chatSessionId: opts.chatSessionId,
+    }), true);
+    const result = await spawnAgent('heartbeat grant fixture', opts).promise;
+    assert.equal(result.code, 0);
+    assert.equal(wire().find(item => item.kind === 'spawn')?.grant, true);
+    assert.equal(poolStats().busy, 0, 'request-lifetime lease retires instead of keeping the grant-bearing process resident');
 });
 
 test('concurrent C queues as busy while the first replacement B remains dispatched', { timeout: 5000 }, async () => {

@@ -451,14 +451,15 @@ test('full-local send: all four aliases lift explicit dest/root and refuse missi
         const scheduledSecret = activateSlackToolGrant('heartbeat-grant', 'heartbeat', 'default')!;
 
         seen.length = 0;
-        const nativeHeaderless = await json('/api/channel/send', {
-            channel: 'slack', type: 'text', text: 'native escape',
+        const concurrentInteractive = await json('/api/channel/send', {
+            channel: 'slack', type: 'text', text: 'interactive',
             target: { ...scheduledDest, targetId: 'COTHER' },
         });
-        assert.equal(nativeHeaderless.status, 409);
-        assert.equal(nativeHeaderless.body.code, 'slack_enforced_destination_grant_required');
-        assert.equal(seen.length, 0, 'headerless native/employee calls cannot choose a target during scheduled work');
+        assert.equal(concurrentInteractive.status, 200, JSON.stringify(concurrentInteractive.body));
+        assert.equal(seen.at(-1)?.targetId, 'COTHER',
+            'a scheduled reservation must not process-globally lock an unrelated Auto caller');
 
+        seen.length = 0;
         const scheduledOmit = await json('/api/channel/send', {
             channel: 'slack', type: 'text', text: 'scheduled',
         }, { 'x-jaw-slack-grant': scheduledSecret });

@@ -710,9 +710,10 @@ function launchPiRpcExecution(profile: PiProfile, pi: PiSettings, options: {
     cwd: string;
     sessionId?: string;
     root?: string;
+    env?: NodeJS.ProcessEnv;
 }) {
     const dir = ensurePiRuntimeConfig(pi, profile.id, options.effort || '', options.root);
-    const inherited = { ...process.env }, cwd = options.cwd;
+    const inherited = { ...(options.env ?? process.env) }, cwd = options.cwd;
     const cmd = resolvePiCommand(inherited);
     const args = [
         ...cmd.baseArgs,
@@ -798,6 +799,7 @@ export function spawnPersistentPiRpc(profile: PiProfile, pi: PiSettings, options
     cwd: string;
     sessionId?: string;
     root?: string;
+    env?: NodeJS.ProcessEnv;
 }): PiRpcSession {
     const profileId = profile.id, initialEffort = options.effort;
     const { cmd, child, owner, startVersionProbe } = launchPiRpcExecution(profile, pi, options);

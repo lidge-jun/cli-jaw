@@ -3,6 +3,7 @@ import type { RemoteTarget } from '../messaging/types.js';
 
 export const SLACK_TOOL_GRANT_ENV = 'JAW_SLACK_TURN_GRANT';
 const GRANT_TTL_MS = 15 * 60_000;
+const ENFORCED_GRANT_TTL_MS = 25 * 60_000;
 const GRANT_CAP = 128;
 export type SlackToolSource = {
     teamId: string;
@@ -22,7 +23,8 @@ const secrets = new Map<string, Entry>();
 
 export function slackCredentialKey(token: string): string { return createHash('sha256').update(token).digest('hex'); }
 
-/** Only authenticated ingress supplies source; the HTTP API cannot mint grants. */
+/** Authenticated ingress or a server-owned heartbeat supplies source; the HTTP
+ * API itself cannot mint grants. */
 export function reserveSlackToolGrant(source: SlackToolSource, binding: { requestId: string; scope: string; chatSessionId: string }): boolean {
     if (!/^[UW][A-Z0-9]{1,63}$/.test(source.actorId) || !/^T[A-Z0-9]{1,63}$/.test(source.teamId)
         || !/^[CGD][A-Z0-9]{1,63}$/.test(source.destination.targetId) || (source.actionToken !== undefined && source.actionToken.length > 8192)
@@ -30,16 +32,20 @@ export function reserveSlackToolGrant(source: SlackToolSource, binding: { reques
         || requests.has(binding.requestId) || requests.size >= GRANT_CAP) return false;
     const controller = new AbortController();
     const secret = `jaw-slack-grant-${randomBytes(32).toString('hex')}`;
+    // A collector may wait 20 minutes for a legitimate long native turn.
+    // Scheduled enforcement must outlive that owner; interactive grants retain
+    // their existing 15-minute window.
+    const ttlMs = source.enforceDestination === true ? ENFORCED_GRANT_TTL_MS : GRANT_TTL_MS;
     const grant: SlackToolGrant = Object.freeze({ ...source, destination: Object.freeze({ ...source.destination }), ...binding,
-        expiresAt: Date.now() + GRANT_TTL_MS, signal: controller.signal });
-    const timer = setTimeout(() => revokeSlackToolGrant(binding.requestId), GRANT_TTL_MS);
+        expiresAt: Date.now() + ttlMs, signal: controller.signal });
+    const timer = setTimeout(() => revokeSlackToolGrant(binding.requestId), ttlMs);
     timer.unref?.();
     const entry: Entry = { grant, secret, active: false, controller, timer };
     requests.set(binding.requestId, entry); secrets.set(secret, entry);
     return true;
 }
 
-/** Called only at a fresh main print process launch, never a pooled native lease. */
+/** Consume a reservation once before its dedicated process/acquisition launches. */
 export function activateSlackToolGrant(requestId: string | undefined, scope: string, chatSessionId: string): string | undefined {
     const entry = requestId ? requests.get(requestId) : undefined;
     if (!entry || entry.active || entry.grant.scope !== scope || entry.grant.chatSessionId !== chatSessionId
@@ -66,12 +72,11 @@ export function revokeSlackToolScope(scope?: string): void {
     for (const [id, entry] of requests) if (scope === undefined || entry.grant.scope === scope) revokeSlackToolGrant(id);
 }
 
-/** True while server-owned scheduled work holds Slack to one destination.
+/** Diagnostic/test view of a live server-owned destination reservation.
  *
- * Native/pool and employee runtimes cannot receive a fresh per-turn environment
- * variable. Their headerless Auto calls are therefore refused while this guard
- * is active; a print child can present the matching grant and proceed. The
- * reservation disappears through the same revoke lifecycle as its secret. */
+ * This is not an authorization gate: process-global gating would block unrelated
+ * interactive Slack sends while a long heartbeat runs. Every scheduled runtime
+ * receives its own grant header instead. */
 export function hasActiveEnforcedSlackDestination(): boolean {
     const now = Date.now();
     for (const entry of requests.values()) {

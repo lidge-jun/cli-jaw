@@ -1,4 +1,4 @@
-import { hasActiveEnforcedSlackDestination, slackCredentialKey } from '../slack/tool-context.js';
+import { slackCredentialKey } from '../slack/tool-context.js';
 import type { Express, Request, Response } from 'express';
 import { resolveSlackToolPrincipal, slackToolContext, withSlackToolAccess, slackToolDenied, type SlackOperatorValidator } from '../slack/tool-access.js';
 import { getHomeChannel } from '../messaging/runtime.js';
@@ -173,13 +173,6 @@ export function registerMessagingRoutes(app: Express, requireAuth: AuthMiddlewar
         const client = getSlackSendClient();
         if (!client.token) throw slackToolDenied('slack_unavailable', 503);
         const scopedGrant = slackToolContext(principal);
-        if (hasActiveEnforcedSlackDestination() && scopedGrant?.enforceDestination !== true) {
-            // Native/pool and employee processes cannot receive a new per-turn
-            // environment header. While scheduled work owns an enforced
-            // destination, a headerless full-local call is ambiguous and must
-            // not be allowed to choose another Slack conversation (#745).
-            throw slackToolDenied('slack_enforced_destination_grant_required', 409);
-        }
         if (principal.kind === 'turn' || scopedGrant?.enforceDestination === true) {
             if (request.filePath) {
                 const inside = (root: string) => {

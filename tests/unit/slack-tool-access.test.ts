@@ -38,6 +38,24 @@ test('grant expiry aborts retained handles and prevents reuse', t => {
     assert.equal(resolveSlackToolGrant(secret), null); assert.equal(value.signal.aborted, true);
 });
 
+test('enforced scheduled grant outlives the 20-minute collector ceiling', t => {
+    t.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: 1000 });
+    assert.ok(reserveSlackToolGrant({
+        teamId: 'T1',
+        actorId: 'U1',
+        destination,
+        credentialKey: slackCredentialKey(token),
+        enforceDestination: true,
+    }, { requestId: 'scheduled', scope: 'default', chatSessionId: 'chat' }));
+    const secret = activateSlackToolGrant('scheduled', 'default', 'chat')!;
+    const value = resolveSlackToolGrant(secret)!;
+    t.mock.timers.tick(20 * 60_000);
+    assert.equal(resolveSlackToolGrant(secret), value, 'collector can still use the grant at its maximum idle time');
+    t.mock.timers.tick(5 * 60_000);
+    assert.equal(resolveSlackToolGrant(secret), null);
+    assert.equal(value.signal.aborted, true);
+});
+
 test('operator token is separate, private and stable across initialization', t => {
     const home = mkdtempSync(join(tmpdir(), 'slack-operator-')); t.after(() => rmSync(home, { recursive: true, force: true }));
     const validate = initializeSlackOperatorAuth(home);

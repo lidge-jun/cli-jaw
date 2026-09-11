@@ -28,8 +28,10 @@ import { detectLegacyMentionWatch, isQuarantined } from './legacy-mention-watch-
 import { verifiedSlackWorkspace } from '../slack/verified-workspace.js';
 import {
     reserveSlackToolGrant,
+    activateSlackToolGrant,
     revokeSlackToolGrant,
     slackCredentialKey,
+    SLACK_TOOL_GRANT_ENV,
 } from '../slack/tool-context.js';
 import { buildRemoteBindingKey } from '../messaging/session-key.js';
 import { getRemoteBoundSessionId, resolveOrCreateRemoteSession } from '../core/chat-sessions.js';
@@ -240,25 +242,43 @@ export function decideHeartbeatReport(report: HeartbeatReport, policy: string): 
     return { send: true, anchor: true, delivered: true };
 }
 
-export function runHeartbeatScript(command: string[]): Promise<HeartbeatReport> {
+export function runHeartbeatScript(
+    command: string[],
+    extraEnv: Record<string, string> = {},
+): Promise<HeartbeatReport> {
     return new Promise(resolve => {
         const [file, ...args] = command;
         if (!file) { resolve(parseHeartbeatReport('', 1)); return; }
-        execFile(file, args, { timeout: 10 * 60_000, maxBuffer: 64 * 1024 }, (error, stdout, stderr) => {
+        execFile(file, args, {
+            timeout: 10 * 60_000,
+            maxBuffer: 64 * 1024,
+            env: { ...process.env, ...extraEnv },
+        }, (error, stdout, stderr) => {
             const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'number' ? error.code : error ? 1 : 0;
             resolve(parseHeartbeatReport([stdout, stderr].filter(Boolean).join('\n'), code));
         });
     });
 }
 
-async function runEmployee(job: Record<string, any>, prompt: string): Promise<HeartbeatReport> {
+async function runEmployee(
+    job: Record<string, any>,
+    prompt: string,
+    requestId: string,
+    target: RemoteTarget,
+): Promise<HeartbeatReport> {
     const emp = (getEmployees.all() as EmployeeRow[]).find(row => row.name === job["employee"]);
     if (!emp) return parseHeartbeatReport('status: failed\nsummary: employee not found');
     try {
         const slot = claimWorker(emp, prompt, { origin: 'heartbeat', scopeId: HEARTBEAT_SCOPE, chatSessionId: 'default' });
         try {
             const ap = { agent: emp.name, role: emp.role || 'general developer', task: prompt, parallel: false, currentPhase: 0, currentPhaseIdx: 0, phaseProfile: [0], mutable: false, scope: null, task_tags: ['heartbeat'] };
-            const result = await runSingleAgent(ap, emp, { tag: `heartbeat:${job["id"] || job["name"]}` }, 1, { origin: 'heartbeat' }, []);
+            const result = await runSingleAgent(ap, emp, { tag: `heartbeat:${job["id"] || job["name"]}` }, 1, {
+                origin: 'heartbeat',
+                scopeKey: HEARTBEAT_SCOPE,
+                chatSessionId: 'default',
+                requestId,
+                target,
+            }, []);
             const text = String(result["text"] || '');
             finishWorker(slot.agentId, text, Array.isArray(result["tools"]) ? result["tools"] : []);
             // finishWorker arms a replay for a Boss to collect. A heartbeat has no
@@ -530,6 +550,7 @@ export type HeartbeatJobDeps = {
     verifyDestination?: (destination: unknown) => Promise<HeartbeatBinding>;
     reserveDestinationGrant?: (binding: Extract<HeartbeatBinding, { state: 'bound' }>, requestId: string) =>
         Promise<(() => void) | null>;
+    activateDestinationGrant?: (requestId: string) => string | undefined;
 };
 
 async function reserveHeartbeatDestinationGrant(
@@ -626,16 +647,25 @@ export async function runHeartbeatJob(job: Record<string, any>, deps: HeartbeatJ
         };
         let rawResult: string;
         if (runner === 'employee') {
-            const guarded = await withDestinationGuard(async () => (await runEmployee(job, prompt)).raw);
+            const guarded = await withDestinationGuard(
+                requestId => runEmployee(job, prompt, requestId, destinationBinding.target).then(report => report.raw),
+            );
             if (!guarded.ok) {
                 log.error(`[heartbeat:${job["name"]}] refuse: slack_grant_unavailable — employee authority could not be reserved`);
                 return;
             }
             rawResult = guarded.value;
         } else if (runner === 'script') {
-            const guarded = await withDestinationGuard(
-                async () => runHeartbeatScript(job["command"] || []),
-            );
+            const guarded = await withDestinationGuard(async requestId => {
+                let grantEnv: Record<string, string> = {};
+                if (destinationBinding.target.channel === 'slack') {
+                    const secret = (deps.activateDestinationGrant
+                        ?? (id => activateSlackToolGrant(id, HEARTBEAT_SCOPE, 'default')))(requestId);
+                    if (!secret) throw new Error('slack_grant_activation_failed');
+                    grantEnv = { [SLACK_TOOL_GRANT_ENV]: secret };
+                }
+                return runHeartbeatScript(job["command"] || [], grantEnv);
+            });
             if (!guarded.ok) {
                 log.error(`[heartbeat:${job["name"]}] refuse: slack_grant_unavailable — script authority could not be reserved`);
                 return;

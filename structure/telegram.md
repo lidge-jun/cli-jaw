@@ -60,13 +60,14 @@ results are not cached. `channel_root` and non-Slack destinations need no Slack 
 separate: its destination is the hit thread it just discovered.
 
 Every Slack heartbeat runner reserves a server-owned tool grant for the same target.
-The grant carries `enforceDestination: true`. A print child presents it, so
-`POST /api/channel/send` supplies an omitted destination and rejects a different one
-even under Auto/full-local authority. Native/pool, employee and script processes cannot
-receive a fresh per-turn environment header; while the reservation is active their
-headerless Slack send is refused, and the server remains the sole final sender.
-Interactive turn grants omit this flag; their existing Auto contract remains
-instance-wide outside the scheduled reservation window.
+The grant carries `enforceDestination: true` and lives for 25 minutes, longer than the
+20-minute collector ceiling. `spawnAgent` activates it before any runtime branch:
+print and employee children inherit the header; Cursor/Grok use a request-lifetime
+native process; Codex App, Claude and Pi use a fresh acquisition; script runners receive
+the same header in their explicit child environment. `POST /api/channel/send` therefore
+supplies an omitted destination and rejects a different one even under Auto/full-local.
+Interactive turn grants omit this flag and unrelated Auto sends are never
+process-globally locked.
 
 
 ### Slack group DMs and scope observations
