@@ -88,6 +88,29 @@ Snapshots are serialized at actual dispatch, unchanged cards are omitted, and
 finish cancels undispatched update waits while joining already-started HTTP.
 The plan title also contains elapsed time; clock ticks never count as work activity.
 
+The card carries two independent axes and they must not be collapsed into one.
+`QUIET_MS` (20s without tool activity) flips the phase from `running` to
+`waiting`: nothing is happening right now. `LONG_RUNNING_SECONDS` (300s of wall
+clock) adds a separate long-running line: this has been going a while. Both are
+routinely true at once, so the long-running copy is appended to the card lines
+and never replaces the phase description — overwriting it would hide the quiet
+notice exactly when it matters. The threshold sits below the watchdog's 600s
+`absoluteMs` default so the card can say "still in progress" while the run is
+healthy; it is not a timeout warning (#673).
+
+The standing target-reply forwarders share one admission,
+`messaging/target-reply-guard.ts`. Which orphan identities a channel accepts
+stays per-channel DATA, because it is a real decision: Slack takes
+`fromQueue`/`fromSteer`/`replyViaTarget`, Telegram only `replyViaTarget`, and
+Discord only `fromQueue`. A channel whose dispatch path already answers ordinary
+turns must not answer them here too, or the user sees the reply twice —
+unifying the lists would double-post on Telegram and Discord.
+`observeSlackReplyControl` stays OUTSIDE that admission: it acts on
+`steer_started`/`queue_update`/`queued_run_started`/`request_settled`, not on
+`orchestrate_done`. The guard also does not drop empty native bodies, because
+Telegram and Discord drop them at admission while Slack drops them inside its
+delivery lane, after the ledger is entered (#699).
+
 Queued requests start the same stream in queued state. The observed start resets
 activity age and replaces the five-minute queue-wait deadline with a twenty-minute
 owned-liveness window. Foreign activity cannot extend it. Cancelled, removed and
