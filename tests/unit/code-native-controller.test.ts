@@ -1,6 +1,6 @@
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import type { CodeItem, CodeModelCatalog, CodePermissionRequest, CodeSessionInfo, CodeSnapshot } from '../../src/code-mode/wire.ts';
+import type { CodeContextUsage, CodeItem, CodeModelCatalog, CodePermissionRequest, CodeSessionInfo, CodeSnapshot } from '../../src/code-mode/wire.ts';
 import { loadCodeDraftStorage } from '../../public/manager/src/code/code-controller-draft-storage.ts';
 import { CodeController } from '../../public/manager/src/code/code-controller-runtime.ts';
 
@@ -623,4 +623,59 @@ test('reloaded in-flight Stop stays captured and reconciles through reads withou
     assert.equal(restored.getModel().operation.kind, 'idle');
     assert.match(restored.getModel().operation.error!, /Press Stop to retry/);
     assert.equal(f.posts().length, 1);
+});
+
+// --- #702: one owner for read-time-attached session meta ---
+// contextUsage and pendingPermissionCount are attached at read time and never
+// persisted, so only list and snapshot can speak for them. Everything else —
+// stored code_session frames, and the create/patch/cancel/attach responses —
+// carries neither, and newer() cannot tell "absent because reaped" from
+// "absent because this payload could never carry it".
+const usage = (totalTokens: number, updatedAt = 9): CodeContextUsage => ({ totalTokens, inputTokens: null,
+    cachedInputTokens: null, outputTokens: null, reasoningOutputTokens: null, processedTokens: null,
+    modelContextWindow: 200_000, updatedAt });
+const meter = (controller: CodeController) => controller.getModel().session?.contextUsage?.totalTokens;
+const row = (controller: CodeController, id: string) => controller.getModel().sessions.find(entry => entry.sessionId === id);
+
+test('a session event alone never blanks the meter, and the owning read still hides it on the same turn it stops reporting', async t => {
+    const f = fixture(t);
+    f.snapshots.set('a', snap(session('a', { contextUsage: usage(345) })));
+    await f.controller.refresh(); await f.controller.selectSession('a');
+    assert.equal(meter(f.controller), 345);
+    // A stored frame cannot carry usage. It must not be read as "the runtime reports none".
+    f.controller.onEvent({ topic: 'code', event: 'code_session', sessionId: 'a', sequence: 4, epoch: 1,
+        session: session('a', { sequence: 4 }) });
+    assert.equal(meter(f.controller), 345, 'an SSE frame is not an observation of occupancy');
+    assert.equal(row(f.controller, 'a')?.contextUsage?.totalTokens, 345, 'the sidebar follows the same observation');
+    // Idle reap: the runtime is gone, so the owning reads stop attaching a figure.
+    f.snapshots.set('a', snap(session('a', { sequence: 5 })));
+    await f.controller.refresh();
+    assert.equal(meter(f.controller), undefined, 'the read that owns the figure withdrew it');
+    assert.equal(row(f.controller, 'a')?.contextUsage, undefined);
+});
+
+test('a metadata write that cannot observe the runtime does not blank a live meter', async t => {
+    const f = fixture(t);
+    f.snapshots.set('a', snap(session('a', { contextUsage: usage(345) })));
+    await f.controller.refresh(); await f.controller.selectSession('a');
+    assert.equal(meter(f.controller), 345);
+    // patch answers from the store, at a higher revision and with no overlay.
+    f.intercept(call => call.method === 'PATCH'
+        ? response({ ok: true, session: session('a', { title: 'renamed', revision: 9 }) }) : undefined);
+    await f.controller.rename('a', 'renamed');
+    assert.equal(f.controller.getModel().session?.title, 'renamed');
+    assert.equal(meter(f.controller), 345, 'a rename is not evidence that the runtime stopped reporting');
+});
+
+test('ranking a listing never strips the figure off the row the owner just read', async t => {
+    const f = fixture(t);
+    // The fixture serves the same session object for the listing and the snapshot,
+    // which is exactly the aliasing that an in-place strip would corrupt.
+    const live = snap(session('a', { contextUsage: usage(1234) }));
+    f.snapshots.set('a', live);
+    await f.controller.refresh();
+    assert.equal(live.session.contextUsage?.totalTokens, 1234, 'the caller object is left intact');
+    assert.equal(row(f.controller, 'a')?.contextUsage?.totalTokens, 1234);
+    await f.controller.selectSession('a');
+    assert.equal(meter(f.controller), 1234);
 });
