@@ -18,6 +18,8 @@ const state: {
     authOk: boolean;
     inspectKind: 'none' | 'foreign_live' | 'uncertain';
     acquireKind: 'acquired' | 'foreign_live' | 'unavailable';
+    inspectError: string;
+    acquireError: string;
     acquired: number;
     released: number;
     inspected: number;
@@ -28,6 +30,7 @@ const state: {
     emitConnectedOnStart: boolean;
 } = {
     started: 0, stopped: 0, authOk: true, inspectKind: 'none', acquireKind: 'acquired',
+    inspectError: 'realpath', acquireError: 'io',
     acquired: 0, released: 0, inspected: 0, ready: 'connected', startThrows: false,
     claimConnected: [], sockets: [], emitConnectedOnStart: true,
 };
@@ -39,14 +42,14 @@ mock.module('../../src/slack/token-claim.ts', {
             state.inspected++;
             return state.inspectKind === 'foreign_live'
                 ? { kind: 'foreign_live', claim: { home: '/foreign', port: '9999', pid: 42, connected: true } }
-                : state.inspectKind === 'uncertain' ? { kind: 'uncertain', error: 'realpath' }
+                : state.inspectKind === 'uncertain' ? { kind: 'uncertain', error: state.inspectError }
                 : { kind: 'none' };
         },
         acquireSlackTokenClaim: (options: { connected: boolean }) => {
             state.acquired++;
             state.claimConnected.push(options.connected);
             if (state.acquireKind === 'foreign_live') return { kind: 'foreign_live', claim: { home: '/foreign', port: '9999', pid: 42, connected: true } };
-            if (state.acquireKind === 'unavailable') return { kind: 'unavailable', error: 'io' };
+            if (state.acquireKind === 'unavailable') return { kind: 'unavailable', error: state.acquireError };
             let released = false;
             return { kind: 'acquired', lease: {
                 claim: { claimId: String(state.acquired) },
@@ -125,6 +128,8 @@ function resetClaimState(): void {
     state.stopped = 0;
     state.inspectKind = 'none';
     state.acquireKind = 'acquired';
+    state.inspectError = 'realpath';
+    state.acquireError = 'io';
     state.acquired = 0;
     state.released = 0;
     state.inspected = 0;
@@ -280,6 +285,47 @@ test('a: claim IO unavailability fails open and starts the socket', async () => 
     assert.deepEqual(await bot.initSlack(), { started: true });
     assert.equal(state.started, 1);
     await bot.shutdownSlack();
+});
+
+test('fail-open claim warnings are routed through the credential masker', async t => {
+    // d5fab24614 wrapped both fail-open branches in logErrorText and shipped
+    // without a test. These are the two branches that keep Slack RUNNING when
+    // ownership cannot be determined, so they are exactly the ones that log an
+    // underlying error on a live instance. Dropping the wrapper again would
+    // publish a bot token into the log ring and the console silently.
+    // Assembled at runtime: a literal bot-token shape in the source trips GitHub
+    // push protection, which is the same instinct this test is defending.
+    const secret = ['xoxb', '9876543210', '1234567890', 'ZmFrZXNlY3JldHZhbHVlMDAx'].join('-');
+    const warnings: string[] = [];
+    t.mock.method(log, 'warn', (...args: unknown[]) => { warnings.push(args.map(value => String(value)).join(' ')); });
+
+    resetClaimState();
+    state.inspectKind = 'uncertain';
+    state.inspectError = `realpath failed reading ${secret}`;
+    const inspecting = await loadBot({ enabled: true, botToken: 'xoxb-t', appToken: 'xapp-t', attachPort: '24575' });
+    await inspecting.initSlack();
+    await inspecting.shutdownSlack();
+
+    resetClaimState();
+    state.acquireKind = 'unavailable';
+    state.acquireError = `io failure writing claim for ${secret}`;
+    const acquiring = await loadBot({ enabled: true, botToken: 'xoxb-t', appToken: 'xapp-t', attachPort: '24575' });
+    await acquiring.initSlack();
+    await acquiring.shutdownSlack();
+
+    const inspection = warnings.find(line => line.includes('token claim inspection unavailable'));
+    const acquisition = warnings.find(line => line.includes('shared token claim unavailable'));
+    assert.ok(inspection, `inspection fail-open warning missing: ${JSON.stringify(warnings)}`);
+    assert.ok(acquisition, `acquisition fail-open warning missing: ${JSON.stringify(warnings)}`);
+    for (const line of [inspection, acquisition]) {
+        // The contract is both halves: the credential is gone, and the warning
+        // still says enough for an operator to act on it.
+        assert.ok(!line.includes(secret), `raw credential reached the log: ${line}`);
+        assert.ok(line.includes('xoxb-9876...redacted'), `masked form missing: ${line}`);
+    }
+    // The acquire fixture still holds the credential string; do not leak it into
+    // whichever test runs next.
+    resetClaimState();
 });
 
 test('b: hello acquisition is released exactly once by shutdown', async () => {
