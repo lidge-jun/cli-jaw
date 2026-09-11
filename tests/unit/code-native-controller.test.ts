@@ -755,3 +755,32 @@ test('a user message whose turn actually ran still acknowledges the send', async
     assert.equal(f.controller.getModel().retryText, null);
     assert.equal(f.posts().length, 1);
 });
+
+// --- after a re-key, nothing is in flight and the UI must stop saying otherwise ---
+
+test('a re-keyed send stops claiming it might already be accepted, and shows the text once', async t => {
+    const f = fixture(t); await f.controller.refresh(); await f.controller.selectSession('a');
+    const pending = deferred<Response>();
+    f.intercept(call => call.path.endsWith('/prompt') ? pending.promise : undefined);
+    f.controller.setInput('original message');
+    const sending = f.controller.send();
+    const key = String(f.posts()[0]!.body['clientTurnKey']);
+    pending.reject(new TypeError('connection dropped'));
+    await sending;
+    // Before the server speaks, acceptance really is unknown and the old copy holds.
+    assert.equal(f.controller.getModel().resendRequired, false);
+    // The orphaned turn is in history, so the transcript already carries the text.
+    const sent: CodeItem = { itemId: 't:user', firstSequence: 4, turnId: 't', kind: 'user_message', status: 'done',
+        text: 'original message', clientTurnKey: key, createdAt: 1, updatedAt: 1 };
+    const terminal: CodeItem = { itemId: 't:terminal', firstSequence: 5, turnId: 't', kind: 'turn_failed', status: 'done',
+        createdAt: 1, updatedAt: 1 };
+    f.snapshots.set('a', snap(session('a', { sequence: 5, status: 'failed' }), [sent, terminal]));
+    f.intercept(() => undefined);
+    await f.controller.refresh();
+    assert.equal(f.controller.getModel().operation.kind, 'unknown-send');
+    assert.equal(f.controller.getModel().resendRequired, true, 'the key is spent, so acceptance is known');
+    const copies = f.controller.getModel().items.filter(item => item.kind === 'user_message' && item.text === 'original message');
+    assert.equal(copies.length, 1, 'no second copy claiming to be in flight');
+    assert.equal(copies[0]!.itemId, 't:user', 'the surviving copy is the real failed attempt');
+    assert.equal(f.controller.getModel().retryText, 'original message', 'the strip still previews the text');
+});

@@ -19,6 +19,11 @@ export const PENDING_USER_ITEM_ID = 'pending:user';
 export function pendingUserItem(draft: CodeDraft, items: CodeItem[], now = Date.now()): CodeItem | null {
     const retry = draft.retry;
     if (!retry) return null;
+    // The server already spent the previous key, so nothing is in flight. This row
+    // renders as "Sending"; showing it here would restate the very confusion the
+    // re-key exists to remove. The failed attempt stays in history and the recovery
+    // strip still previews the text.
+    if (retry.resend) return null;
     // The authoritative item is here: show that one instead.
     if (items.some(item => item.kind === 'user_message' && item.clientTurnKey === retry.key)) return null;
     const unknown = draft.operation.kind === 'unknown-send';

@@ -8,7 +8,12 @@ export interface CodeDraft {
     selection: CodeCreateSessionRequest;
     selectionEdit: number;
     operation: CodeControllerModel['operation'];
-    retry: { text: string; key: string; edit: number } | null;
+    /**
+     * `resend` marks an attempt whose key the server already spent. Acceptance is
+     * then known — it failed — so the surfaces that describe an unconfirmed send
+     * must stop hedging.
+     */
+    retry: { text: string; key: string; edit: number; resend?: boolean } | null;
     createUnknown: boolean;
     requiredSequence: number;
     stopTarget: { turnId: string; epoch: number; outcome: 'pending' | 'unknown' | 'retryable' | 'accepted' } | null;
@@ -40,7 +45,9 @@ function restoreDraft(saved: StoredCodeDraft): CodeDraft {
     draft.createUnknown = saved.creating;
     draft.retry = saved.retry;
     if (saved.creating) draft.operation = { kind: 'creating', error: 'Creation was interrupted by reload. The original session may exist; no request has been retried.' };
-    if (saved.retry) draft.operation = { kind: 'unknown-send', error: 'The original message has not been reconciled after reload. It will not be sent automatically.' };
+    if (saved.retry) draft.operation = { kind: 'unknown-send', error: saved.retry.resend
+        ? 'The original attempt ended on the server without running. The message was not resent; Retry will submit it as a new message.'
+        : 'The original message has not been reconciled after reload. It will not be sent automatically.' };
     if (saved.stop) {
         draft.stopTarget = { ...saved.stop, outcome: 'unknown' };
         draft.operation = { kind: 'stopping', error: 'Checking the captured Stop after reload. No cancellation has been resent.' };

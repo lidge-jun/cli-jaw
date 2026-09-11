@@ -20,7 +20,7 @@ export interface StoredCodeDraft {
     selection: DraftSelection;
     selectionEdit: number;
     creating: boolean;
-    retry: { text: string; key: string; edit: number } | null;
+    retry: { text: string; key: string; edit: number; resend?: boolean } | null;
     stop: { turnId: string; epoch: number } | null;
 }
 export interface StoredCodeEndpoint {
@@ -49,7 +49,10 @@ function parseDraft(value: unknown): StoredCodeDraft | null {
     return {
         input: value['input'], edit: value['edit'], selectionEdit: value['selectionEdit'], creating: value['creating'],
         selection: { provider: selection['provider'] as DraftSelection['provider'], cwd: selection['cwd'], model: selection['model'], effort: selection['effort'], permissionMode: selection['permissionMode'] as DraftSelection['permissionMode'] },
-        retry: retry === null ? null : { text: retry['text'] as string, key: retry['key'] as string, edit: retry['edit'] as number },
+        // `resend` is optional on purpose: a draft stored before this field existed
+        // must still parse, or recovery is wiped instead of downgraded.
+        retry: retry === null ? null : { text: retry['text'] as string, key: retry['key'] as string, edit: retry['edit'] as number,
+            ...(retry['resend'] === true ? { resend: true } : {}) },
         stop: stop === null ? null : { turnId: stop['turnId'] as string, epoch: stop['epoch'] as number },
     };
 }
@@ -116,7 +119,8 @@ function pack(draft: CodeDraft): StoredCodeDraft | null {
     const { provider, cwd, model, effort, permissionMode } = draft.selection;
     return parseDraft({ input: draft.input, edit: draft.edit, selection: { provider, cwd, model, effort, permissionMode }, selectionEdit: draft.selectionEdit,
         creating: draft.createUnknown || draft.operation.kind === 'creating',
-        retry: draft.retry ? { text: draft.retry.text, key: draft.retry.key, edit: draft.retry.edit } : null,
+        retry: draft.retry ? { text: draft.retry.text, key: draft.retry.key, edit: draft.retry.edit,
+            ...(draft.retry.resend ? { resend: true } : {}) } : null,
         stop: draft.stopTarget ? { turnId: draft.stopTarget.turnId, epoch: draft.stopTarget.epoch } : null });
 }
 export function saveCodeDraftStorage(storage: Storage, endpoint: string, book: CodeDraftBook): string | null {

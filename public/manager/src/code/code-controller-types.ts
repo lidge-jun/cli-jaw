@@ -27,6 +27,8 @@ export interface CodeControllerModel {
     operation: { kind: CodeOperationKind; error: string | null };
     retryText: string | null;
     canRetrySameSend: boolean;
+    /** The previous key is spent: Retry sends a new message rather than reusing it. */
+    resendRequired?: boolean;
     permissionOperations: Record<string, { pending: boolean; error: string | null }>;
     hasMoreSessions: boolean;
     hasOlderHistory: boolean;
