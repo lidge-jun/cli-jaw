@@ -27,7 +27,11 @@ test('ACP in-band steer with real text still delivers the answer', async () => {
     // cancel-reprompt: a later request steers in-band, then the SAME turn answers.
     broadcast('steer_started', { origin: 'slack', scope: 'default', sessionId: 'default',
         requestId: 'req-later', mode: 'cancel-reprompt', localDispatch: true });
-    broadcast('orchestrate_done', { ...lastMeta, text: '두 질문에 대한 답변' });
+    broadcast('orchestrate_done', {
+        ...lastMeta,
+        sessionId: lastMeta['chatSessionId'],
+        text: '두 질문에 대한 답변',
+    });
 
     const result = await pending;
     assert.equal(result.text, '두 질문에 대한 답변',
