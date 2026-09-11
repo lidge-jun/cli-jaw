@@ -240,3 +240,42 @@ test('#694b-D a garbled naver payload is refused rather than half-parsed', () =>
         assert.equal(normalized, null, `"${raw.slice(0, 20)}" must not normalize`);
     }
 });
+
+test('#694b-E the normalizer predicate and the dispatch it guards agree exactly', () => {
+    // buildByLabel runs behind hasPublicEndpointNormalizer, so the two can fail
+    // in both directions and both are the bug #694 is about. A branch with no
+    // set entry is unreachable — the failure that left the scheduler's yt-dlp
+    // branch dead. A set entry with no branch says "supported" and then returns
+    // raw text — the failure that made four platforms look supported. Read the
+    // dispatch and the declarations and require set equality.
+    const source = readFileSync(join(resolverRoot, 'src/browser/adaptive-fetch/public-endpoint-normalizers.ts'), 'utf8');
+    const dispatchAt = source.indexOf('function buildByLabel');
+    const labelsAt = source.indexOf('const NORMALIZER_LABELS');
+    const prefixesAt = source.indexOf('const NORMALIZER_PREFIXES');
+    const predicateAt = source.indexOf('export function hasPublicEndpointNormalizer');
+    assert.ok(
+        dispatchAt > -1 && labelsAt > dispatchAt && prefixesAt > labelsAt && predicateAt > prefixesAt,
+        'buildByLabel, its label set, its prefix list and the predicate must all be present in that order',
+    );
+
+    const quoted = (text: string) => [...text.matchAll(/'([^']+)'/g)].map(match => match[1]!);
+    const dispatch = source.slice(dispatchAt, labelsAt);
+    const branchLabels = new Set([...dispatch.matchAll(/label === '([^']+)'/g)].map(match => match[1]!));
+    const branchPrefixes = new Set([...dispatch.matchAll(/label\.startsWith\('([^']+)'\)/g)].map(match => match[1]!));
+    const declaredLabels = new Set(quoted(source.slice(labelsAt, prefixesAt)));
+    const declaredPrefixes = new Set(quoted(source.slice(prefixesAt, predicateAt)));
+
+    assert.ok(branchLabels.size >= 15, `expected many exact-label branches, found ${branchLabels.size}`);
+    assert.ok(branchPrefixes.size >= 3, `expected several prefix branches, found ${branchPrefixes.size}`);
+
+    const missing = [...branchLabels].filter(label => !declaredLabels.has(label));
+    assert.deepEqual(missing, [], `buildByLabel handles ${missing.join(', ')} but the guard rejects them, so those branches can never run`);
+    const orphaned = [...declaredLabels].filter(label => !branchLabels.has(label));
+    assert.deepEqual(orphaned, [], `the guard calls ${orphaned.join(', ')} normalizable but buildByLabel has no branch, so they fall through to raw text while looking supported`);
+    assert.deepEqual([...branchPrefixes].filter(p => !declaredPrefixes.has(p)), [], 'a prefix branch is missing from the guard');
+    assert.deepEqual([...declaredPrefixes].filter(p => !branchPrefixes.has(p)), [], 'the guard declares a prefix buildByLabel does not handle');
+
+    // The predicate must actually answer for what it declares.
+    for (const label of declaredLabels) assert.ok(hasPublicEndpointNormalizer(label));
+    for (const prefix of declaredPrefixes) assert.ok(hasPublicEndpointNormalizer(`${prefix}probe`));
+});
