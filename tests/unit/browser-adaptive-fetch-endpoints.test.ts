@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { resolvePublicEndpointCandidates } from '../../src/browser/adaptive-fetch/endpoint-resolvers.js';
 
 test('adaptive fetch resolves core public endpoint shapes', () => {
@@ -59,4 +62,73 @@ test('adaptive fetch keeps reddit json immutable and adds both Hacker News APIs'
         'hacker-news-item-api',
         'hacker-news-algolia-item-api',
     ]);
+});
+
+// #694: the Naver finance window was pinned to a fixed pair of calendar dates,
+// so it would have started truncating the newest sessions once the calendar
+// passed the hardcoded end.
+
+const resolverRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const SEOUL_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+function yyyymmdd(year: number, month: number, day: number): string {
+    return `${year}${String(month + 1).padStart(2, '0')}${String(day).padStart(2, '0')}`;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function seoulYyyymmddAt(epochMs: number): string {
+    const shifted = new Date(epochMs + SEOUL_OFFSET_MS);
+    return yyyymmdd(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate());
+}
+
+function seoulTwoYearsBackAt(epochMs: number): string {
+    const shifted = new Date(epochMs + SEOUL_OFFSET_MS);
+    const rolled = Date.UTC(shifted.getUTCFullYear() - 2, shifted.getUTCMonth(), shifted.getUTCDate());
+    return seoulYyyymmddAt(rolled - SEOUL_OFFSET_MS);
+}
+
+test('#694-E naver finance computes its window on the Seoul calendar', () => {
+    // The resolver reads its own clock, so bracket the call: if a Seoul
+    // midnight lands inside those microseconds, either answer is correct and
+    // the test must not flake on it.
+    const before = Date.now();
+    const candidates = resolvePublicEndpointCandidates('https://finance.naver.com/item/main.naver?code=005930');
+    const after = Date.now();
+
+    assert.equal(candidates.length, 1);
+    assert.equal(candidates[0]?.label, 'naver-finance-json');
+
+    const params = new URL(candidates[0]!.url).searchParams;
+    const startTime = params.get('startTime') ?? '';
+    const endTime = params.get('endTime') ?? '';
+    assert.match(startTime, /^\d{8}$/);
+    assert.match(endTime, /^\d{8}$/);
+
+    // The end runs a Seoul day ahead so no offset can cut the newest session.
+    const ends = [seoulYyyymmddAt(before + DAY_MS), seoulYyyymmddAt(after + DAY_MS)];
+    assert.ok(ends.includes(endTime), `endTime ${endTime} is not the Seoul day after now (${ends.join(' or ')})`);
+
+    // Two Seoul years back, computed the same way the resolver computes it, so
+    // a constant that merely has the right year cannot pass.
+    const starts = [seoulTwoYearsBackAt(before), seoulTwoYearsBackAt(after)];
+    assert.ok(starts.includes(startTime), `startTime ${startTime} is not two Seoul years back (${starts.join(' or ')})`);
+
+    // And it must be a date that exists: a naive year subtraction produces a
+    // 29 February in years that have none.
+    const roundTrip = new Date(Date.UTC(
+        Number(startTime.slice(0, 4)),
+        Number(startTime.slice(4, 6)) - 1,
+        Number(startTime.slice(6)),
+    ));
+    assert.equal(roundTrip.getUTCMonth() + 1, Number(startTime.slice(4, 6)), 'startTime must be a real calendar date');
+    assert.equal(roundTrip.getUTCDate(), Number(startTime.slice(6)), 'startTime must be a real calendar date');
+});
+
+test('#694-F the resolver source carries no frozen calendar constant', () => {
+    const source = readFileSync(join(resolverRoot, 'src/browser/adaptive-fetch/endpoint-resolvers.ts'), 'utf8');
+    assert.equal(/startTime=\d/.test(source), false, 'the query must not carry a literal start date');
+    assert.equal(/endTime=\d/.test(source), false, 'the query must not carry a literal end date');
+    assert.match(source, /startTime=\$\{start\}/);
+    assert.match(source, /endTime=\$\{end\}/);
 });

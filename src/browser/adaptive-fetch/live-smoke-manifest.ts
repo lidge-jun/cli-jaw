@@ -7,14 +7,16 @@ export interface LiveSmokeManifestEntry {
     reason: string;
 }
 
-export const LIVE_SMOKE_MANIFEST_VERSION = 1;
+export const LIVE_SMOKE_MANIFEST_VERSION = 2;
 
 export const LIVE_SMOKE_MANIFEST: LiveSmokeManifestEntry[] = [
     {
         id: 'npm-public-endpoint',
         url: 'https://www.npmjs.com/package/cli-jaw',
-        expectedLabels: ['npm-registry', 'direct-fetch'],
-        expectedEvidence: ['public-endpoint:npm-registry'],
+        // The resolver emits npm-registry-latest first for a versionless
+        // package URL, so that is the label the live run would actually use.
+        expectedLabels: ['npm-registry-latest', 'npm-registry', 'direct-fetch'],
+        expectedEvidence: ['public-endpoint:npm-registry-latest'],
         browserMode: 'auto',
         reason: 'package registry public endpoint drift check',
     },
@@ -53,24 +55,24 @@ export const LIVE_SMOKE_MANIFEST: LiveSmokeManifestEntry[] = [
     {
         id: 'arxiv-public-api',
         url: 'https://arxiv.org/abs/2301.00001',
-        expectedLabels: ['arxiv-oai-xml', 'direct-fetch'],
-        expectedEvidence: ['public-endpoint:arxiv-oai-xml'],
+        expectedLabels: ['arxiv-api', 'direct-fetch'],
+        expectedEvidence: ['public-endpoint:arxiv-api'],
         browserMode: 'auto',
-        reason: 'arXiv OAI API reader drift check',
+        reason: 'arXiv API reader drift check',
     },
     {
         id: 'stackoverflow-public-api',
         url: 'https://stackoverflow.com/questions/1',
-        expectedLabels: ['stackexchange-api', 'direct-fetch'],
-        expectedEvidence: ['public-endpoint:stackexchange-api'],
+        expectedLabels: ['stackexchange-question-api', 'direct-fetch'],
+        expectedEvidence: ['public-endpoint:stackexchange-question-api'],
         browserMode: 'auto',
         reason: 'StackExchange API reader drift check',
     },
     {
         id: 'wikipedia-public-api',
         url: 'https://en.wikipedia.org/wiki/Node.js',
-        expectedLabels: ['wikipedia-rest-api', 'direct-fetch'],
-        expectedEvidence: ['public-endpoint:wikipedia-rest-api'],
+        expectedLabels: ['wikipedia-summary-api', 'direct-fetch'],
+        expectedEvidence: ['public-endpoint:wikipedia-summary-api'],
         browserMode: 'auto',
         reason: 'Wikipedia REST API reader drift check',
     },
