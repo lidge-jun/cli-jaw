@@ -887,7 +887,6 @@ async function slackOrchestrate(
                 const text = collected.data.collectionFailure === 'error' ? t('slack.progress.failure', {}, locale)
                     : collected.data.collectionFailure === 'timeout' ? t('tg.timeout', {}, locale) : collected.text;
                 display.phase('delivering');
-                bodyAttempted = true;
                 await deliverSlackTurnBody({
                     token, target, text, data: resultData, signal, display, settleAck, current,
                     executionOutcome: () => executionOutcome,
@@ -898,6 +897,7 @@ async function slackOrchestrate(
                     skipSendIfEmpty: false,
                     relayMode: 'same-outbound',
                     relayWhenTextEmpty: true,
+                    onAttempt: () => { bodyAttempted = true; },
                     report: (delivered, confirmed) => { bodySucceeded = delivered; bodyConfirmed = confirmed; },
                     onSent: alreadyDelivered => log.info(`[slack:out${alreadyDelivered ? ':skipped-self-delivered' : ''}] ${target.targetId}: ${redactOutboundText(text).slice(0, 80)}`),
                 });
@@ -1002,6 +1002,9 @@ async function deliverSlackTurnBody(options: {
     /** Mirrors the flags out as they change, so a caller's catch and finally see
      *  the same partial state the inline blocks used to leave behind. */
     report?: (delivered: boolean, confirmed: boolean) => void;
+    /** Fires once the outbound registration exists, which is the moment the
+     *  original inline blocks considered the body attempted. */
+    onAttempt?: () => void;
     onSent?: (alreadyDelivered: boolean) => void;
     onRelayError?: (error: unknown) => void;
 }): Promise<SlackTurnBodyOutcome> {
@@ -1013,6 +1016,7 @@ async function deliverSlackTurnBody(options: {
     const outbound = slackOutboundRegistry.start(signal);
     let outboundClosed = false;
     const closeOutbound = () => { if (!outboundClosed) { outboundClosed = true; outbound.done(); } };
+    options.onAttempt?.();
     try {
         const skipped = options.skipSendIfEmpty && !text;
         const since = options.since;
