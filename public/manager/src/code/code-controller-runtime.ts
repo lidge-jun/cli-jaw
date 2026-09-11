@@ -1,6 +1,6 @@
 import type {
-    CodeCreateSessionRequest, CodeModelCatalog, CodePatchSessionRequest, CodePermissionRequest,
-    CodeSessionInfo, CodeWireEvent,
+    CodeContextUsage, CodeCreateSessionRequest, CodeModelCatalog, CodePatchSessionRequest,
+    CodePermissionRequest, CodeSessionInfo, CodeWireEvent,
 } from '../../../../src/code-mode/wire';
 import type { CodeControllerModel, CodeControllerOptions, CodeSessionFilter, CodeTransportState } from './code-controller-types';
 import { CodeClientError, codeBaseOrigin, createCodeSessionClient, type CodeGitInfo } from './code-session-client';
@@ -22,12 +22,34 @@ const newer = (incoming: CodeSessionInfo, current?: CodeSessionInfo | null) => !
     || incoming.epoch > current.epoch || (incoming.epoch === current.epoch && (incoming.sequence > current.sequence
         || (incoming.sequence === current.sequence && incoming.revision >= current.revision)));
 
+/**
+ * What a read that could actually observe the runtime said about attention.
+ *
+ * `contextUsage` and `pendingPermissionCount` are attached at read time and never
+ * persisted, so only the two server reads that overlay them — list and snapshot —
+ * can speak for them. A stored `code_session` frame and the create/patch/cancel/
+ * attach responses carry neither field, and `newer()` ranks only epoch, sequence
+ * and revision, so without a separate owner a payload that simply cannot carry a
+ * field would outrank one that measured it.
+ *
+ * Absence is recorded, not skipped: once the runtime is reaped the owning read
+ * stops reporting usage, and the meter has to hide in that same turn.
+ */
+interface CodeSessionAttention {
+    epoch: number;
+    sequence: number;
+    revision: number;
+    pendingPermissionCount?: number;
+    contextUsage?: CodeContextUsage;
+}
+
 /** Code's async owner; React only subscribes and supplies the single SSE transport. */
 export class CodeController {
     private client;
     private book: CodeDraftBook;
     private details = new Map<string, CodeSessionState>();
     private summaries = new Map<string, CodeSessionInfo>();
+    private attention = new Map<string, CodeSessionAttention>();
     private rows: string[] = [];
     private catalog: CodeModelCatalog | null = null;
     private catalogError: string | null = null;
@@ -100,6 +122,7 @@ export class CodeController {
             this.book.listeners.delete(this.changed);
             this.details.clear();
             this.summaries.clear();
+            this.attention.clear();
             this.rows = [];
             this.gitGeneration++;
             this.pickerGeneration++;
@@ -133,13 +156,41 @@ export class CodeController {
         const summary = this.summaries.get(id);
         return summary && newer(summary, detail) ? summary : detail ?? summary ?? null;
     }
-    private accept(session: CodeSessionInfo): void {
+    /**
+     * Record what an owning read saw. Call this BEFORE accept() on the same object:
+     * accept() copies rather than mutates, but the ordering keeps the rule obvious.
+     */
+    private observe(session: CodeSessionInfo): void {
+        const known = this.attention.get(session.sessionId);
+        if (known && !newer(session, { ...session, epoch: known.epoch, sequence: known.sequence, revision: known.revision })) return;
+        this.attention.set(session.sessionId, {
+            epoch: session.epoch, sequence: session.sequence, revision: session.revision,
+            ...(session.pendingPermissionCount === undefined ? {} : { pendingPermissionCount: session.pendingPermissionCount }),
+            ...(session.contextUsage === undefined ? {} : { contextUsage: session.contextUsage }),
+        });
+    }
+    /** Publish `base` with attention resolved from its owner, absence included. */
+    private resolve(id: string, base: CodeSessionInfo): CodeSessionInfo {
+        const seen = this.attention.get(id);
+        const { contextUsage: _usage, pendingPermissionCount: _count, ...rest } = base;
+        return {
+            ...rest,
+            ...(seen?.pendingPermissionCount === undefined ? {} : { pendingPermissionCount: seen.pendingPermissionCount }),
+            ...(seen?.contextUsage === undefined ? {} : { contextUsage: seen.contextUsage }),
+        };
+    }
+    private accept(incoming: CodeSessionInfo): void {
         if (!this.active) return;
-        if (!newer(session, this.info(session.sessionId))) return;
+        if (!newer(incoming, this.info(incoming.sessionId))) return;
+        // The ranked record carries identity and lifecycle only. Attached fields are
+        // dropped by copy, never by mutation: readIndex hands the same row to
+        // observe(), and update() hands over details.session, which the reducer may
+        // still be holding (code-session-state.ts snapshot replace).
+        const { contextUsage: _usage, pendingPermissionCount: _count, ...session } = incoming;
         this.summaries.set(session.sessionId, session);
         if (this.summaries.size > MAX_INDEX + MAX_DETAILS) {
             const victim = [...this.summaries.keys()].find(id => id !== this.book.selectedId && !this.details.has(id) && !this.rows.includes(id));
-            if (victim) this.summaries.delete(victim);
+            if (victim) { this.summaries.delete(victim); this.attention.delete(victim); }
         }
         const draft = this.book.sessions.get(session.sessionId);
         if (draft?.stopTarget && (session.turnId !== draft.stopTarget.turnId || session.epoch !== draft.stopTarget.epoch
@@ -189,7 +240,13 @@ export class CodeController {
         const canonical = this.info(id);
         const draft = this.draft(id);
         const detail = id ? this.details.get(id) : undefined;
-        const session = canonical && detail?.synced ? { ...canonical, pendingPermissionCount: detail.permissions.length } : canonical;
+        // One place decides what either screen may show, so the meter and the
+        // sidebar cannot disagree about the same read.
+        const publish = (row: CodeSessionInfo, state?: CodeSessionState): CodeSessionInfo => {
+            const resolved = this.resolve(row.sessionId, row);
+            return state?.synced ? { ...resolved, pendingPermissionCount: state.permissions.length } : resolved;
+        };
+        const session = canonical ? publish(canonical, detail) : canonical;
         const operation = draft.operation;
         const persistenceWarning = this.book.storageWarning ?? this.book.recoveryWarning;
         const pending = ['creating', 'sending', 'stopping', 'resuming', 'patching'].includes(operation.kind) && !operation.error;
@@ -197,7 +254,7 @@ export class CodeController {
         return {
             catalog: this.catalog, sessions: this.rows.map(id => {
                 const row = this.info(id), detail = this.details.get(id);
-                return row && detail?.synced ? { ...row, pendingPermissionCount: detail.permissions.length } : row;
+                return row ? publish(row, detail) : row;
             }).filter((row): row is CodeSessionInfo => !!row),
             selectedId: id, session, items: withPendingUserItem(draft, detail?.items ?? []),
             permissions: detail?.permissions ?? [],
@@ -246,6 +303,8 @@ export class CodeController {
                 ...(this.filter.scope === 'cwd' ? { cwd: this.workingDir } : {}) }, this.abort.signal);
             if (!this.active || life !== this.lifetime || generation !== this.indexGeneration) return;
             for (const session of page.sessions) {
+                // A listing is one of the two reads that can see the live runtime.
+                this.observe(session);
                 this.accept(session);
                 const state = this.details.get(session.sessionId);
                 if (state?.hydrated && !state.hydrating && session.sequence > state.cursor) {
@@ -258,7 +317,7 @@ export class CodeController {
             this.moreSessions = page.hasMore && this.rows.length < MAX_INDEX;
             this.indexError = null;
             const retained = new Set([...this.rows, ...this.details.keys(), ...(this.book.selectedId ? [this.book.selectedId] : [])]);
-            for (const id of this.summaries.keys()) if (!retained.has(id)) this.summaries.delete(id);
+            for (const id of this.summaries.keys()) if (!retained.has(id)) { this.summaries.delete(id); this.attention.delete(id); }
         } catch (error) {
             if (this.active && life === this.lifetime && generation === this.indexGeneration) this.indexError = message(error);
         } finally {
@@ -292,6 +351,8 @@ export class CodeController {
                         const snapshot = await this.client.snapshot(id, read.signal);
                         if (!current()) return;
                         checkedStop = checkingStop;
+                        // The other owning read. Absence here is the idle reap.
+                        this.observe(snapshot.session);
                         this.update(id, reduceCodeSession(this.state(id), { type: 'snapshot', snapshot }));
                     }
                     state = this.state(id);
@@ -473,7 +534,11 @@ export class CodeController {
             this.accept(await this.client.patchSession(id, { ...input, expectedRevision: session.revision }));
             draft.operation = { kind: 'idle', error: null };
         } catch (error) {
-            if (error instanceof CodeClientError && error.session?.sessionId === id) this.accept(error.session);
+            if (error instanceof CodeClientError && error.session?.sessionId === id) {
+                // A revision conflict answers with the snapshot session, overlay included.
+                this.observe(error.session);
+                this.accept(error.session);
+            }
             failure = error instanceof CodeClientError ? error : new Error(message(error));
             draft.operation = { kind: 'idle', error: failure.message };
         }
