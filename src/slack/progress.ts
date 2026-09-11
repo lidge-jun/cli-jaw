@@ -5,6 +5,7 @@ import type { DraftStreamOptions } from '../messaging/draft-stream.js';
 import type { RemoteTarget } from '../messaging/types.js';
 import { log } from '../core/logger.js';
 import { redactOutboundPayload } from '../messaging/redact.js';
+import { inc } from '../messaging/metrics.js';
 import { t } from '../core/i18n.js';
 import {
     createSlackActivity, projectSlackPrintTool,
@@ -15,6 +16,13 @@ import {
 export type { SlackProgressOutcome, SlackProgressPhase } from './progress-activity.js';
 const NATIVE_INTERVAL_MS = 1000;
 const FALLBACK_INTERVAL_MS = 3200;
+/** Consecutive failed live edits before the card stops trying.
+ *
+ *  Not a cap on updating: a stream that expires mid-job keeps its message and
+ *  keeps editing it, which is how a long run stays visible. This bounds the
+ *  case where those edits stop landing — a transport that has rejected the same
+ *  request three times running is not about to accept the fourth. */
+const MAX_CONSECUTIVE_LIVE_FAILURES = 3;
 // chat.appendStream is Tier 4 (100+/minute). Reserve at most 90/minute
 // across this process's streams sharing one credential, including tool updates.
 const APPEND_SPACING_MS = 667;
@@ -118,6 +126,10 @@ export async function startSlackProgress(
     let state: Ready = { mode: 'none', ts: null };
     let closed = false;
     let remoteEnded = false;
+    // A status card whose message is gone: Slack will refuse every later edit
+    // for the same reason, so there is nothing left to try.
+    let messageGone = false;
+    let consecutiveLiveFailures = 0;
     let confirmed = false;
     let dirty = false;
     let lastAttemptAt = -Infinity;
@@ -143,6 +155,22 @@ export async function startSlackProgress(
         if (idleTimer) clearTimer(idleTimer);
         timer = idleTimer = null;
     };
+
+    /** Stop live updating this card, once, for a stated reason.
+     *
+     *  The idle loop re-dirtied the snapshot every 3.2s and `schedule()` sent it
+     *  again, so a card whose message had been deleted produced 47 consecutive
+     *  `chat.update` → `message_not_found` calls over two and a half minutes and
+     *  would have kept going for the life of the job (#744). Ending the live loop
+     *  is the whole fix: the card freezes at its last known state, which is
+     *  honest, and the answer still arrives by its own path. */
+    function endLive(reason: string, gone: boolean): void {
+        if (remoteEnded) return;
+        if (gone) messageGone = true;
+        remoteEnded = true;
+        clearScheduled();
+        inc('slack.progress.stream_state_lost', { channel: 'slack', result: reason });
+    }
     function abortProgress(): void {
         closed = true;
         clearScheduled();
@@ -237,16 +265,37 @@ export async function startSlackProgress(
         if (!response.attempted) { dirty = true; return; }
         if (response.result.ok) { lastSignature = signature; lastSnapshot = snapshot; }
         if (response.result.status === 429 || response.result.error === 'ratelimited' || response.result.error === 'rate_limited') dirty = true;
-        if (method === 'chat.appendStream' && response.result.error === 'message_not_in_streaming_state') useMessageUpdates();
-        if (response.result.error === 'stopped_by_user') {
-            remoteEnded = true;
-            clearScheduled();
+        const error = response.result.error ?? '';
+        if (response.result.ok) consecutiveLiveFailures = 0;
+        // The message itself is unreachable. Retrying cannot bring it back, and
+        // posting a replacement would put a second status card in the thread.
+        if (error === 'message_not_found' || error === 'cant_update_message') {
+            endLive(error, true);
+            return;
+        }
+        if (error === 'stopped_by_user') { endLive(error, false); return; }
+        if (method === 'chat.appendStream' && error === 'message_not_in_streaming_state') {
+            // Slack expires a stream while a long job continues. Keep the message
+            // this stream already owns and edit it from here on, so the card stays
+            // current instead of freezing at the five-minute mark.
+            useMessageUpdates();
+            return;
+        }
+        // A rate limit is a "later", not a "no": the embargo already spaces it out
+        // and `dirty` was set above so the same content is retried.
+        if (!response.result.ok && response.result.status !== 429
+            && error !== 'ratelimited' && error !== 'rate_limited') {
+            if (++consecutiveLiveFailures >= MAX_CONSECUTIVE_LIVE_FAILURES) {
+                endLive(error || 'repeated_update_failure', false);
+            }
         }
     }
     function startIdle(): void {
         if (closed || remoteEnded || !state.ts) return;
         idleTimer = setTimer(() => {
             idleTimer = null;
+            // The flag can be raised while this timer is pending.
+            if (closed || remoteEnded) return;
             dirty = true;
             schedule();
             startIdle();
@@ -322,6 +371,10 @@ export async function startSlackProgress(
                     await ready;
                     await inFlight;
                     if (!state.ts || controller.signal.aborted) return;
+                    // A card whose message is gone takes no terminal edit either.
+                    // `message_not_found` already counted as confirmation before;
+                    // the difference now is that no request is spent proving it.
+                    if (messageGone) { confirmed = true; return; }
                     const snapshot = model.snapshot();
                     let response = await call(state.mode === 'native' ? 'chat.stopStream' : 'chat.update', {
                         channel: address.targetId, ts: state.ts,
