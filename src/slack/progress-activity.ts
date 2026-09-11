@@ -6,7 +6,7 @@ import { normalizeLocale, t } from '../core/i18n.js';
 
 export type SlackActivityCategory = 'read' | 'write' | 'search' | 'web' | 'command' | 'external' | 'tool';
 export type SlackProgressOutcome = 'complete' | 'error' | 'cancelled' | 'expired';
-export type SlackProgressPhase = 'queued' | 'running' | 'waiting' | 'delivering';
+export type SlackProgressPhase = 'queued' | 'running' | 'waiting' | 'delivering' | 'unavailable';
 export interface SlackActivityTool {
     key: string;
     file?: string;
@@ -34,7 +34,7 @@ const LONG_RUNNING_SECONDS = 300;
 const MAX_SECONDS = 999_999_999;
 const categories = new Set(['read', 'write', 'search', 'web', 'command', 'external', 'tool']);
 const statuses = new Set(['in_progress', 'complete', 'error', 'stopped', 'observed']);
-const phases = new Set(['queued', 'running', 'waiting', 'delivering']);
+const phases = new Set(['queued', 'running', 'waiting', 'delivering', 'unavailable']);
 const outcomes = new Set(['complete', 'error', 'cancelled', 'expired']);
 const nonTools = new Set(['thinking', 'reasoning', 'narration', 'message', 'speech', 'commentary', 'final']);
 const aliases = new Map<string, SlackActivityCategory>([
@@ -104,7 +104,7 @@ type Row = { category: SlackActivityCategory; status: SlackActivityTool['status'
 const ended = (value: SlackActivityTool['status']): boolean =>
     value === 'complete' || value === 'error' || value === 'stopped';
 
-export function createSlackActivity(now: () => number, locale: string, initialPhase: 'queued' | 'running' = 'running'): {
+export function createSlackActivity(now: () => number, locale: string, initialPhase: 'queued' | 'running' = 'running', workflowResponse = false): {
     tool(entry: SlackActivityTool): boolean;
     phase(value: SlackProgressPhase): boolean;
     finish(outcome: SlackProgressOutcome, reason?: 'merged' | 'removed', bodyDelivered?: boolean): void;
@@ -124,6 +124,7 @@ export function createSlackActivity(now: () => number, locale: string, initialPh
     let terminal: SlackProgressOutcome | undefined;
     let terminalReason: 'merged' | 'removed' | undefined;
     let deliveryReceipt: boolean | undefined;
+    let activityUnavailable = false;
     let finishedAt = createdAt;
     const identities = new Map<string, Row>();
     let recent: Row[] = [];
@@ -171,6 +172,7 @@ export function createSlackActivity(now: () => number, locale: string, initialPh
         },
         phase(value) {
             if (terminal || currentPhase === 'delivering' || !phases.has(value) || value === 'queued' || value === currentPhase) return false;
+            if (value === 'unavailable') activityUnavailable = true;
             const beganExecution = currentPhase === 'queued' && value === 'running';
             currentPhase = value;
             if (beganExecution) lastActivityAt = time();
@@ -187,7 +189,7 @@ export function createSlackActivity(now: () => number, locale: string, initialPh
             const at = terminal ? finishedAt : time();
             const seconds = (since: number): number => Math.min(MAX_SECONDS, Math.max(0, Math.floor((at - since) / 1000)));
             const phase = currentPhase === 'running' && at - lastActivityAt >= QUIET_MS ? 'waiting' : currentPhase;
-            const description = copy(terminalReason ?? terminal ?? phase);
+            const description = copy(terminalReason ?? (terminal === 'complete' && workflowResponse ? 'workflowComplete' : terminal ?? phase));
             // End of observation does not manufacture a successful tool result.
             const activities: SlackActivitySnapshot['activities'] = [...recent].reverse().map(row => ({
                 title: `${formatSlackActivityDetail(row.activity) || `${copy(`category.${row.category}`)}${row.file ? ` · ${row.file}` : ''}`}: ${copy(`status.${terminal && !ended(row.status) ? 'unconfirmed' : row.status}`)}`,
@@ -198,6 +200,7 @@ export function createSlackActivity(now: () => number, locale: string, initialPh
             const elapsed = copy('elapsed', { seconds: seconds(createdAt) });
             const age = copy('lastActivity', { seconds: seconds(lastActivityAt) });
             const lines = [description, elapsed, age];
+            if (activityUnavailable && (terminal || phase !== 'unavailable')) lines.push(copy('unavailable'));
             // Elapsed alone reads the same at 30s and 500s: a number the eye
             // skips. Past the threshold the card says so in words.
             //

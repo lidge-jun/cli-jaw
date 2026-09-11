@@ -16,6 +16,7 @@ export type SlackProgressLifecycle = {
     drain(signal?: AbortSignal): Promise<void>;
 };
 export type SlackProgressLifecycleOptions = {
+    workflowResponse?: boolean;
     token: string; target: RemoteTarget; requestId: string; scope: string; sessionId: string; locale: string;
     recipientUserId?: string;
     workingDir?: string;
@@ -45,6 +46,8 @@ export function createSlackProgressLifecycle(input: SlackProgressLifecycleOption
     let pendingPhase: SlackProgressPhase | undefined;
     let pending: SlackActivityTool[] = [];
     let nativePending: NativePending[] = [];
+    const pendingGaps = new Map<string, number>();
+    let activityUnavailable = false;
     let boundRun: string | null = null;
     let lastNativeSeq = 0;
     let knownOutcome: 'error' | 'cancelled' | undefined;
@@ -60,6 +63,7 @@ export function createSlackProgressLifecycle(input: SlackProgressLifecycleOption
         && (data['origin'] === undefined || data['origin'] === 'slack');
     function clearNativeBuffer(): void {
         nativePending = [];
+        pendingGaps.clear();
         if (bufferTimer) clearTimeout(bufferTimer);
         bufferTimer = null;
     }
@@ -88,6 +92,12 @@ export function createSlackProgressLifecycle(input: SlackProgressLifecycleOption
         lastNativeSeq = entry.seq;
         observe(entry.tool);
     }
+    function markUnavailable(): void {
+        if (activityUnavailable || !acceptingTools || detached) return;
+        activityUnavailable = true;
+        pendingPhase = 'unavailable';
+        current?.phase('unavailable');
+    }
     function bind(identity: Readonly<RuntimeLivenessIdentity>): void {
         if (detached || identity.requestId !== config.requestId || identity.origin !== 'slack'
             || identity.scope !== config.scope || identity.sessionId !== config.sessionId
@@ -95,10 +105,12 @@ export function createSlackProgressLifecycle(input: SlackProgressLifecycleOption
         notify(() => config.onActivity?.());
         if (!acceptingTools || boundRun) return;
         boundRun = identity.runId;
+        const gapAt = pendingGaps.get(boundRun);
         const entries = nativePending.filter(entry => entry.runId === boundRun && Date.now() - entry.at < BUFFER_TTL_MS)
             .sort((a, b) => a.seq - b.seq);
         clearNativeBuffer();
         for (const entry of entries) acceptNative(entry);
+        if (gapAt !== undefined && Date.now() - gapAt < BUFFER_TTL_MS) markUnavailable();
     }
     function legacy(type: string, data: Record<string, unknown>): void {
         if (detached || !data || !matches(data)) return;
@@ -154,6 +166,17 @@ export function createSlackProgressLifecycle(input: SlackProgressLifecycleOption
         unsubscribeIdentity = subscribeRuntimeLiveness(bind);
         unsubscribeEvents = subscribe(event => {
             const data = event.data;
+            if (acceptingTools && !detached && event.topic === 'agent' && event.event === 'agent_runtime_gap'
+                && data['scope'] === config.scope && data['sessionId'] === config.sessionId
+                && data['reason'] === 'projection_degraded' && identityField(data['runId'])) {
+                if (boundRun) {
+                    if (data['runId'] === boundRun) markUnavailable();
+                } else {
+                    pendingGaps.set(data['runId'], Date.now());
+                    while (pendingGaps.size > MAX_CANDIDATES) pendingGaps.delete(pendingGaps.keys().next().value!);
+                }
+                return;
+            }
             if (!acceptingTools || detached || event.topic !== 'agent' || event.event !== 'agent_runtime'
                 || data['version'] !== 1 || data['scope'] !== config.scope || data['sessionId'] !== config.sessionId
                 || data['kind'] !== 'tool' || !identityField(data['runId']) || !identityField(data['turnId'])
@@ -179,6 +202,7 @@ export function createSlackProgressLifecycle(input: SlackProgressLifecycleOption
             if (!enabled || handle || terminal || shutdown) return;
             handle = startSlackProgress(config.token, config.target, '', {
                 locale: config.locale, initialPhase,
+                workflowResponse: config.workflowResponse === true,
                 ...(config.workingDir ? { workingDir: config.workingDir } : {}),
                 ...(config.recipientUserId ? { recipientUserId: config.recipientUserId } : {}),
                 onPosted: ts => notify(() => config.onPosted(ts)),

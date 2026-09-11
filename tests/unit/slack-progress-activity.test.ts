@@ -8,6 +8,17 @@ import { createSlackActivity, projectSlackPrintTool, projectSlackRuntimeTool,
 
 loadLocales(fileURLToPath(new URL('../../public/locales/', import.meta.url)));
 const tool = (key: string, status: SlackActivityTool['status'] = 'in_progress', category: SlackActivityTool['category'] = 'read'): SlackActivityTool => ({ key, status, category });
+test('lost activity stays explicit through response delivery without certifying task success', () => {
+    const model = createSlackActivity(() => 0, 'en', 'running', true);
+    assert.equal(model.phase('unavailable'), true);
+    assert.match(model.snapshot().summary, /Activity updates unavailable/);
+    assert.equal(model.snapshot().workStatus, 'in_progress');
+    model.phase('delivering'); model.finish('complete', undefined, true);
+    const result = model.snapshot();
+    assert.match(result.summary, /Activity updates unavailable/);
+    assert.match(result.summary, /Workflow response ended; production outcome is not verified/);
+    assert.equal(result.delivery?.title, 'Answer delivered');
+});
 function fixture(locale = 'en', initial: 'queued' | 'running' = 'running') {
     let clock = 1000;
     return { model: createSlackActivity(() => clock, locale, initial), at: (value: number) => { clock = value; } };

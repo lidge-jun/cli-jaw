@@ -42,6 +42,7 @@ export type SlackProgressHandle = {
     ts(): string | null;
 };
 export type SlackProgressOptions = {
+    workflowResponse?: boolean;
     fetchImpl?: SlackFetch;
     draftClock?: Pick<DraftStreamOptions, 'now' | 'setTimer' | 'clearTimer'>;
     recipientUserId?: string;
@@ -104,7 +105,7 @@ export async function startSlackProgress(
     const now = options.draftClock?.now ?? Date.now;
     const setTimer = options.draftClock?.setTimer ?? setTimeout;
     const clearTimer = options.draftClock?.clearTimer ?? clearTimeout;
-    const model = createSlackActivity(now, options.locale ?? 'ko', options.initialPhase ?? 'running');
+    const model = createSlackActivity(now, options.locale ?? 'ko', options.initialPhase ?? 'running', options.workflowResponse === true);
     const controller = new AbortController();
     const updateWait = new AbortController();
     const parentSignal = options.signal;

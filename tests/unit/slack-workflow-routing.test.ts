@@ -29,6 +29,7 @@ const admissions: Array<{ prompt: string; meta: RecordData; result: import('../.
 const collections: Array<{ prompt: string; meta: RecordData }> = [];
 const enqueued: Array<{ prompt: string; origin: string; meta: RecordData }> = [];
 const finishes: Array<{ requestId: string; outcome: string }> = [];
+const progressOptions: SlackProgressLifecycleOptions[] = [];
 const unexpectedNetwork: string[] = [];
 let busy = false;
 let reply = 'Completed example task.';
@@ -61,10 +62,13 @@ mock.module('../../src/orchestrator/collect.ts', { namedExports: {
     orchestrateAndCollect: async () => { throw new Error('Unexpected collector'); },
 } });
 mock.module('../../src/slack/progress-lifecycle.ts', { namedExports: {
-    createSlackProgressLifecycle: (options: SlackProgressLifecycleOptions) => ({
+    createSlackProgressLifecycle: (options: SlackProgressLifecycleOptions) => {
+        progressOptions.push(options);
+        return {
         start() {}, phase() {}, seal() {}, async drain() {},
         async finish(outcome: string) { finishes.push({ requestId: options.requestId, outcome }); },
-    }),
+        };
+    },
 } });
 mock.module('../../src/slack/forwarder.ts', { namedExports: {
     createSlackForwarder: () => () => {}, relaySlackImages: async () => {},
@@ -137,6 +141,7 @@ function done(index: number, extra: RecordData = {}): RecordData {
 test.beforeEach(async context => {
     context.mock.timers.enable({ apis: ['Date', 'setTimeout'], now: Date.now() });
     calls.length = admissions.length = collections.length = enqueued.length = finishes.length = 0;
+    progressOptions.length = 0;
     unexpectedNetwork.length = 0;
     busy = false; failBody = false; reply = 'Completed example task.';
     Object.assign(settings, { cli: 'codex', locale: 'en',
@@ -176,6 +181,7 @@ test('enabled workflow reaches real gateway and collector with captured skill, o
     assert.ok(admitted.prompt.includes(SKILL));
     assert.ok(admitted.prompt.endsWith(JSON.stringify(input)));
     assert.equal(collections[0]!.prompt, admitted.prompt);
+    assert.equal(progressOptions[0]!.workflowResponse, true);
     assert.equal(bodies().length, 1);
 });
 
@@ -285,6 +291,7 @@ test('real gateway queue admission preserves server-owned workflow metadata', as
     assert.equal(enqueued[0]!.origin, 'slack');
     assert.equal(enqueued[0]!.prompt, admissions[0]!.prompt);
     assert.deepEqual(enqueued[0]!.meta['slackWorkflow'], admissions[0]!.meta['slackWorkflow']);
+    assert.equal(progressOptions[0]!.workflowResponse, true);
 });
 
 for (const policy of ['steer', 'collect'] as const) test(`configured workflow queues separately under global ${policy} policy`, async () => {
@@ -309,6 +316,7 @@ for (const sender of ['legacy-bot', 'human'] as const) test(`direct ${sender} SI
     assert.equal(admissions[0]!.meta['slackWorkflow'], undefined);
     assert.equal(collections[0]!.meta['slackWorkflow'], undefined);
     assert.equal(reactions('x').length, 0);
+    assert.equal(progressOptions[0]!.workflowResponse, false);
     assert.equal(reactions('white_check_mark')[0]!.body['timestamp'], incoming.ts);
     assert.equal(bodies().length, 1);
     assert.equal(bodies()[0]!.body['text'], '[SILENT]');

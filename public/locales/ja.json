@@ -948,6 +948,8 @@
   "slack.progress.waiting": "次の更新を待機中",
   "slack.progress.delivering": "回答を送信中",
   "slack.progress.complete": "作業の観測終了",
+  "slack.progress.workflowComplete": "ワークフローの応答が終了しました。実際の制作結果は別途確認が必要です。",
+  "slack.progress.unavailable": "活動の更新を表示できません。実行は継続している可能性があります。",
   "slack.progress.error": "リクエスト失敗",
   "slack.progress.cancelled": "リクエスト取消済み",
   "slack.progress.expired": "進捗表示が終了しました。実行は続いている可能性があります。",

@@ -75,6 +75,8 @@ native detail/output never substitutes for missing structured input. Unknown too
 and unsafe metadata remain category-only. Same-tool terminal updates retain the
 observed filename without inventing a running state. Presentation events never select final answers.
 
+Persistence gaps use the same private run/session/scope binding before showing an activity-unavailable notice. Prebinding gap candidates are bounded and expire for binding after 30 seconds. A gap never counts as tool activity, renews the run deadline, changes the model outcome or leaks stored content. The notice remains visible through final delivery. Captured workflows use neutral response-ended wording: a response and its delivery receipt do not certify production success. General-chat outcome wording, ACKs and native final values remain unchanged; business status comes from the production system, never from parsing model prose.
+
 `progress.ts` streams a native plan containing a summary, at most six recent
 observation slots and an optional delivery card. Only replaceable task titles
 and statuses are updated: Slack task details append, so they are not a snapshot

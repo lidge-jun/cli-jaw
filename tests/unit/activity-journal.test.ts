@@ -10,7 +10,7 @@ import { db } from '../../src/core/db.js';
 import { settings, JAW_HOME } from '../../src/core/config.js';
 import { recordRuntimeEvent, type RuntimeEventContext } from '../../src/agent/runtime/events.js';
 import { readActivityPage, listActivityRuns, getActivityOwner, isTraceSessionOwner,
-    ACTIVITY_RUN_ROWS, ACTIVITY_RUN_BYTES, ACTIVITY_GLOBAL_ROWS, ACTIVITY_PAGE_BYTES } from '../../src/trace/activity-journal.js';
+    ACTIVITY_RUN_ROWS, ACTIVITY_RUN_BYTES, ACTIVITY_GLOBAL_ROWS, ACTIVITY_GLOBAL_BYTES, ACTIVITY_PAGE_BYTES } from '../../src/trace/activity-journal.js';
 import { closeActivity, readActivityControl, writeActivityControl, expireActivityPrefix } from '../../src/trace/activity-control.js';
 import { startTraceRun, appendTraceEvent, finalizeTraceRun, getTraceRun, getTraceEvent,
     pruneTraceEvents, stampTraceTool, updateTraceToolRow } from '../../src/trace/store.js';
@@ -158,6 +158,56 @@ test('legacy runtime rows count toward global row and byte admission limits', ()
             .run(rows, old, raw, Buffer.byteLength(raw), Date.now());
         assert.equal(text(c), null); assert.equal(page(c)?.loss, 'global_limit');
     }
+});
+
+for (const pressure of ['rows', 'bytes', 'configured-rows'] as const) {
+    test(`finished history cannot permanently starve new activity under ${pressure} pressure`, () => {
+        const old = started(); text(old, 'old prefix');
+        recordRuntimeEvent(old, { kind: 'turn-end', status: 'done', finalText: 'old answer' });
+        finalizeTraceRun(old.runId, 'done');
+        const high = page(old)!.through;
+        const active = started(); const retained = text(active, 'active prefix')!;
+        if (pressure === 'rows') {
+            const n = ACTIVITY_GLOBAL_ROWS - 5;
+            db.prepare(`WITH RECURSIVE nums(n) AS (VALUES(1) UNION ALL SELECT n+1 FROM nums WHERE n < ?)
+                INSERT INTO trace_events (run_id,seq,source,event_type,raw_json,bytes,retention_status,created_at)
+                SELECT ?,n+100,'runtime','message','{}',2,'available',? FROM nums`).run(n, old.runId, Date.now());
+        } else if (pressure === 'bytes') {
+            db.prepare("UPDATE trace_events SET bytes=? WHERE run_id=? AND source='runtime'")
+                .run(Math.ceil(ACTIVITY_GLOBAL_BYTES / 3), old.runId);
+        } else {
+            settings.trace.maxRows = (db.prepare('SELECT count(*) n FROM trace_events').get() as { n: number }).n + 1;
+        }
+        const fresh = run();
+        assert.ok(recordRuntimeEvent(fresh, { kind: 'turn-start', provider: 'fixture' }), 'new run must obtain capacity from closed history');
+        assert.equal(page(fresh)?.loss, null);
+        assert.equal(page(old)?.loss, 'retention');
+        assert.equal(page(old)?.through, high);
+        assert.deepEqual(page(old)?.events, []);
+        assert.ok(getTraceRun(old.runId), 'expired history retains its ownership/tombstone');
+        assert.equal(getTraceEvent(active.runId, retained.seq)?.raw !== undefined, true);
+        assert.equal(page(active)?.loss, null, 'active prefix is never reclaimed for capacity');
+        const total = db.prepare("SELECT count(*) n,sum(bytes) bytes FROM trace_events WHERE source='runtime'").get() as { n: number; bytes: number };
+        assert.ok(total.n <= ACTIVITY_GLOBAL_ROWS); assert.ok(total.bytes <= ACTIVITY_GLOBAL_BYTES);
+    });
+}
+
+test('failed admission rolls back capacity reclamation and publishes no partial history', t => {
+    t.mock.method(console, 'warn', () => {}); t.mock.method(console, 'error', () => {});
+    const old = started(); text(old);
+    recordRuntimeEvent(old, { kind: 'turn-end', status: 'done', finalText: 'answer' });
+    finalizeTraceRun(old.runId, 'done');
+    const before = page(old);
+    settings.trace.maxRows = (db.prepare('SELECT count(*) n FROM trace_events').get() as { n: number }).n + 1;
+    const next = run();
+    db.exec(`CREATE TRIGGER activity_capacity_fail BEFORE INSERT ON trace_events WHEN new.source='runtime'
+        BEGIN SELECT RAISE(ABORT, 'fixture insert failure'); END`);
+    const events: BusEvent[] = []; const unsubscribe = subscribe(e => events.push(e));
+    try {
+        assert.equal(recordRuntimeEvent(next, { kind: 'turn-start', provider: 'fixture' }), null);
+        assert.deepEqual(page(old), before);
+        assert.equal(events.length, 0);
+    } finally { db.exec('DROP TRIGGER activity_capacity_fail'); unsubscribe(); }
 });
 
 test('failed control update rolls back runtime insert and publishes nothing', t => {

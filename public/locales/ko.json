@@ -948,6 +948,8 @@
   "slack.progress.waiting": "다음 업데이트를 기다리는 중",
   "slack.progress.delivering": "답변 전달 중",
   "slack.progress.complete": "작업 관찰 종료",
+  "slack.progress.workflowComplete": "워크플로 응답이 끝났습니다. 실제 제작 결과는 별도 확인이 필요합니다.",
+  "slack.progress.unavailable": "활동 내역을 표시할 수 없습니다. 실행은 계속될 수 있습니다.",
   "slack.progress.error": "요청 실패",
   "slack.progress.cancelled": "요청 취소됨",
   "slack.progress.expired": "진행 표시가 종료되었습니다. 실행은 계속될 수 있습니다.",

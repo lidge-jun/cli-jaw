@@ -3,6 +3,34 @@ import { expireActivityPrefix } from './activity-control.js';
 
 const rawPredicate = "source <> 'runtime' AND NOT (source = 'system' AND event_type = 'runtime.control.v1')";
 const countRows = db.prepare('SELECT COUNT(*) AS count FROM trace_events');
+const runtimeTotals = db.prepare("SELECT COUNT(*) AS count, COALESCE(SUM(bytes), 0) AS bytes FROM trace_events WHERE source = 'runtime'");
+
+/** Admission reserves space without ever evicting a live append base. Called
+ * inside the journal's immediate transaction, so reclamation and insert are atomic. */
+export function makeActivityCapacity(maxRuntimeRows: number, maxRuntimeBytes: number, maxRows: number): boolean {
+    let runtime = runtimeTotals.get() as { count: number; bytes: number };
+    let total = (countRows.get() as { count: number }).count;
+    if (runtime.count <= maxRuntimeRows && runtime.bytes <= maxRuntimeBytes && total <= maxRows) return true;
+    if (total > maxRows) {
+        // Preserve the existing total-trace policy: raw rows first, then whole
+        // closed prefixes, and only then obsolete closed-owner tombstones.
+        pruneActivityTraceRows(0, maxRows);
+        runtime = runtimeTotals.get() as { count: number; bytes: number };
+        total = (countRows.get() as { count: number }).count;
+    }
+    if (runtime.count > maxRuntimeRows || runtime.bytes > maxRuntimeBytes) {
+        const closed = db.prepare(`SELECT r.id FROM trace_runs r WHERE r.status <> 'running'
+            AND EXISTS (SELECT 1 FROM trace_events e WHERE e.run_id = r.id AND e.source = 'runtime')
+            ORDER BY r.started_at, r.id`).all() as { id: string }[];
+        for (const run of closed) {
+            if (runtime.count <= maxRuntimeRows && runtime.bytes <= maxRuntimeBytes) break;
+            expireActivityPrefix(run.id);
+            runtime = runtimeTotals.get() as { count: number; bytes: number };
+        }
+        total = (countRows.get() as { count: number }).count;
+    }
+    return runtime.count <= maxRuntimeRows && runtime.bytes <= maxRuntimeBytes && total <= maxRows;
+}
 
 /** Retention never removes an append base from a retained semantic suffix. */
 export function pruneActivityTraceRows(cutoff: number, maxRows: number): { deletedEvents: number; deletedRuns: number } {

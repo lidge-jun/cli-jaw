@@ -670,6 +670,7 @@ function trackSlackReply(options: SlackReplyOptions): void {
     slackNoticeRecord.reserve(requestId, target);
     display = createSlackProgressLifecycle({
         token, target, requestId, scope: session.scope, sessionId: session.chatSessionId, locale,
+        workflowResponse: Boolean(options.workflow),
         ...(options.workingDir ? { workingDir: options.workingDir } : {}),
         ...(recipientUserId ? { recipientUserId } : {}),
         registerTeardown: registerSlackProgressTeardown,
@@ -839,6 +840,7 @@ async function slackOrchestrate(
             if (ctx.requestId) slackNoticeRecord.reserve(ctx.requestId, target);
             const display = createSlackProgressLifecycle({
                 token, target, requestId: ctx.requestId, scope: ctx.scope, sessionId: ctx.chatSessionId, locale,
+                workflowResponse: Boolean(dedupe.workflow),
                 ...(workingDir ? { workingDir } : {}),
                 ...(dedupe.recipientUserId ? { recipientUserId: dedupe.recipientUserId } : {}),
                 registerTeardown: registerSlackProgressTeardown,

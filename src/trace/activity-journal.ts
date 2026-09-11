@@ -4,6 +4,7 @@ import type { RuntimeEvent } from '../shared/runtime-contract.js';
 import type { TracePointer, TraceRunStatus } from './types.js';
 import { appendTraceEvent } from './store.js';
 import { stringifyTraceValue } from './redact.js';
+import { makeActivityCapacity } from './activity-retention.js';
 import { decodeRuntimeBody, RUNTIME_BODY_BYTES, type RuntimeBodyRecord } from './runtime-body-codec.js';
 import { ACTIVITY_CONTROL_TYPE, readActivityControl, writeActivityControl, markActivityLoss,
     type ActivityControl, type ActivityLoss } from './activity-control.js';
@@ -21,8 +22,6 @@ type OwnerRow = { id: string; session_id: string; scope_key: string | null;
 export type ActivityOwner = OwnerRow & { scope_key: string };
 const ownerStmt = db.prepare(`SELECT r.id, r.session_id, r.scope_key, r.status, r.audience
     FROM trace_runs r JOIN chat_sessions s ON s.id = r.session_id WHERE r.id = ? AND r.session_id = ?`);
-const totals = db.prepare("SELECT COUNT(*) AS count, COALESCE(SUM(bytes), 0) AS bytes FROM trace_events WHERE source = 'runtime'");
-const rowCount = db.prepare('SELECT COUNT(*) AS count FROM trace_events');
 const rowsStmt = db.prepare(`SELECT seq, event_type, bytes,
     CASE WHEN length(CAST(raw_json AS BLOB)) <= ${RUNTIME_BODY_BYTES} THEN raw_json ELSE NULL END AS raw_json
     FROM trace_events WHERE run_id = ? AND source = 'runtime' AND seq > ? AND seq <= ? ORDER BY seq LIMIT ?`);
@@ -82,13 +81,11 @@ const append = db.transaction((input: AppendInput): TracePointer | null => {
     const c = current.state;
     if (c.closed || c.loss) return null;
     const bytes = Buffer.byteLength(stringifyTraceValue(input.raw));
-    const total = totals.get() as { count: number; bytes: number };
-    const allRows = (rowCount.get() as { count: number }).count;
     const configuredRows = settings['trace']?.maxRows ?? 50_000;
     const loss: ActivityLoss | null = bytes > RUNTIME_BODY_BYTES ? 'event_limit'
         : c.count >= ACTIVITY_RUN_ROWS || c.bytes + bytes > ACTIVITY_RUN_BYTES ? 'run_limit'
-            : total.count >= ACTIVITY_GLOBAL_ROWS || total.bytes + bytes > ACTIVITY_GLOBAL_BYTES
-                || allRows >= configuredRows ? 'global_limit' : null;
+            : !makeActivityCapacity(ACTIVITY_GLOBAL_ROWS - 1, ACTIVITY_GLOBAL_BYTES - bytes, configuredRows - 1)
+                ? 'global_limit' : null;
     if (loss) { writeActivityControl(input.runId, current.seq, { ...c, loss }); return null; }
     const pointer = appendTraceEvent({ runId: input.runId, source: 'runtime', eventType: input.eventType,
         raw: input.raw, preview: input.eventType });
