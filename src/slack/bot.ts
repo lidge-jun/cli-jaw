@@ -656,32 +656,20 @@ function trackSlackReply(options: SlackReplyOptions): void {
                 const text = data['error'] === true && !requireBodyDelivery ? t('slack.progress.failure', {}, locale)
                     : requireBodyDelivery && !rawText.trim() ? '' : rawText;
                 display.phase('delivering');
-                const outbound = slackOutboundRegistry.start(signal);
-                try {
-                    const alreadyDelivered = text && (anchor ?? observedAnchor) !== undefined && wasSelfDelivered({ target, text, since: (anchor ?? observedAnchor)! });
-                    const sent: { ok: boolean; ts?: string } = text ? (alreadyDelivered ? { ok: true } : await sendSlackText(token, target, text, {
-                        signal: outbound.signal, ...(requireBodyDelivery ? { requireBodyDelivery: true } : {}),
-                        onPosted: async () => {
-                            // Same early-settle rule as the direct path: every chunk is
-                            // posted, so the ACK must not wait on readback verification.
-                            delivered = true;
-                            const early = bodyProgressOutcome(data, true, executionOutcome, !current());
-                            await settleAck(early === 'complete' ? 'success' : 'failure');
-                        },
-                    })) : { ok: false };
-                    delivered = sent.ok;
-                    confirmedDelivery = Boolean(alreadyDelivered) || (sent.ok && Boolean(sent.ts));
-                } finally { outbound.done(); }
-                const outcome = bodyProgressOutcome(data, delivered, executionOutcome, !current());
-                if (delivered && target.threadId) markThreadParticipated(target.targetId, target.threadId);
-                await settleAck(delivered && outcome === 'complete' ? 'success' : 'failure');
-                await display.finish(outcome, { bodyDelivered: confirmedDelivery });
-                if (text && current()) {
-                    const relay = slackOutboundRegistry.start(signal);
-                    try { await relaySlackImages(token, target, text, { signal: relay.signal }); }
-                    catch (error) { log.error('[slack:queue-relay]', logErrorText(error)); }
-                    finally { relay.done(); }
-                }
+                // Same rule as the direct path, and now literally the same code:
+                // the queued/steer turn differs only in where its text and anchor
+                // come from, and in keeping the image relay off the body's
+                // cancellation domain (#686).
+                await deliverSlackTurnBody({
+                    token, target, text, data, signal, display, settleAck, current,
+                    executionOutcome: () => executionOutcome,
+                    since: anchor ?? observedAnchor,
+                    skipSendIfEmpty: true,
+                    relayMode: 'isolated',
+                    relayWhenTextEmpty: false,
+                    report: (sentOk, confirmed) => { delivered = sentOk; confirmedDelivery = confirmed; },
+                    onRelayError: error => log.error('[slack:queue-relay]', logErrorText(error)),
+                });
             } catch (error) {
                 log.error('[slack:queue-send]', logErrorText(error));
                 await Promise.allSettled([
@@ -899,31 +887,20 @@ async function slackOrchestrate(
                 const text = collected.data.collectionFailure === 'error' ? t('slack.progress.failure', {}, locale)
                     : collected.data.collectionFailure === 'timeout' ? t('tg.timeout', {}, locale) : collected.text;
                 display.phase('delivering');
-                const outbound = slackOutboundRegistry.start(signal);
-                try {
-                    bodyAttempted = true;
-                    const alreadyDelivered = wasSelfDelivered({ target, text, since: turnStartedAt });
-                    const sendResult: { ok: boolean; ts?: string } = alreadyDelivered ? { ok: true } : await sendSlackText(token, target, text, {
-                        signal: outbound.signal,
-                        ...(requiresNativeBodyDelivery(collected.data) ? { requireBodyDelivery: true } : {}),
-                        onPosted: async () => {
-                            // Every chunk is posted, so the answer is visible. Settle
-                            // the ACK here: readback verification below can take
-                            // seconds per chunk and must not hold the reaction (#417).
-                            bodySucceeded = true;
-                            const early = bodyProgressOutcome(resultData, true, executionOutcome, !current());
-                            await settleAck(early === 'complete' ? 'success' : 'failure');
-                        },
-                    });
-                    bodySucceeded = sendResult.ok;
-                    bodyConfirmed = alreadyDelivered || (sendResult.ok && Boolean(sendResult.ts));
-                    const outcome = bodyProgressOutcome(resultData, bodySucceeded, executionOutcome, !current());
-                    if (bodySucceeded && target.threadId) markThreadParticipated(target.targetId, target.threadId);
-                    await settleAck(bodySucceeded && outcome === 'complete' ? 'success' : 'failure');
-                    await display.finish(outcome, { bodyDelivered: bodyConfirmed });
-                    if (current()) await relaySlackImages(token, target, text, { signal: outbound.signal });
-                    log.info(`[slack:out${alreadyDelivered ? ':skipped-self-delivered' : ''}] ${target.targetId}: ${redactOutboundText(text).slice(0, 80)}`);
-                } finally { outbound.done(); }
+                bodyAttempted = true;
+                await deliverSlackTurnBody({
+                    token, target, text, data: resultData, signal, display, settleAck, current,
+                    executionOutcome: () => executionOutcome,
+                    since: turnStartedAt,
+                    // The direct path posts even an empty body: sendSlackText owns
+                    // the empty_message rule, and the collector already replaced a
+                    // truly empty answer with its no-response placeholder.
+                    skipSendIfEmpty: false,
+                    relayMode: 'same-outbound',
+                    relayWhenTextEmpty: true,
+                    report: (delivered, confirmed) => { bodySucceeded = delivered; bodyConfirmed = confirmed; },
+                    onSent: alreadyDelivered => log.info(`[slack:out${alreadyDelivered ? ':skipped-self-delivered' : ''}] ${target.targetId}: ${redactOutboundText(text).slice(0, 80)}`),
+                });
             } catch (err: unknown) {
                 log.error('[slack:error]', logErrorText(err));
                 if (current()) executionOutcome ??= 'error';
@@ -978,6 +955,106 @@ async function slackOrchestrate(
         return;
     }
 
+}
+
+type SlackTurnBodyOutcome = { delivered: boolean; confirmed: boolean; outcome: SlackProgressOutcome };
+
+/**
+ * The one place a Slack turn's answer reaches the wire (#686).
+ *
+ * The direct dispatch path and the queued/steer tracker each carried their own
+ * copy of send -> early ACK -> progress finish -> image relay. Every delivery
+ * fix therefore had to land twice, and the ones that did not became bugs only
+ * the queued path kept (#655, #673).
+ *
+ * The two paths do genuinely disagree, so each disagreement is a PARAMETER
+ * rather than a branch inside the spine: the caller derives its own text from
+ * its own payload, brings its own delivery-ledger anchor, decides whether an
+ * empty body is posted at all, and chooses whether the image relay shares the
+ * body's cancellation domain. Collapsing those would silently change live
+ * behaviour, which is why this is an extraction and not a merge.
+ *
+ * Deliberately NOT folded in: the orphan forwarder. It has no ACK handle and no
+ * progress card, because it exists precisely for turns whose waiter is gone.
+ */
+async function deliverSlackTurnBody(options: {
+    token: string;
+    target: RemoteTarget;
+    /** Already derived by the caller: the two paths read different payloads. */
+    text: string;
+    data: Record<string, unknown>;
+    signal: AbortSignal;
+    display: SlackProgressLifecycle;
+    settleAck: (outcome: 'success' | 'failure') => Promise<void>;
+    /** Re-read, never cached: liveness can flip part-way through a send. */
+    current: () => boolean;
+    executionOutcome: () => 'error' | 'cancelled' | undefined;
+    /** Delivery-ledger anchor. Undefined skips the self-delivery check. */
+    since: number | undefined;
+    /** Queued: an empty body is never posted. Direct: sendSlackText decides. */
+    skipSendIfEmpty: boolean;
+    /** isolated: the relay gets its own registration and swallows its error.
+     *  same-outbound: the relay shares the body's registration and may throw. */
+    relayMode: 'isolated' | 'same-outbound';
+    /** NOT the same switch as skipSendIfEmpty: the queued path also skips the
+     *  IMAGE relay on an empty body, so one empty-text flag cannot serve both. */
+    relayWhenTextEmpty: boolean;
+    /** Mirrors the flags out as they change, so a caller's catch and finally see
+     *  the same partial state the inline blocks used to leave behind. */
+    report?: (delivered: boolean, confirmed: boolean) => void;
+    onSent?: (alreadyDelivered: boolean) => void;
+    onRelayError?: (error: unknown) => void;
+}): Promise<SlackTurnBodyOutcome> {
+    const { token, target, text, data, signal, display, settleAck, current, executionOutcome } = options;
+    const requireBodyDelivery = requiresNativeBodyDelivery(data);
+    let bodySucceeded = false;
+    let bodyConfirmed = false;
+    const report = () => options.report?.(bodySucceeded, bodyConfirmed);
+    const outbound = slackOutboundRegistry.start(signal);
+    let outboundClosed = false;
+    const closeOutbound = () => { if (!outboundClosed) { outboundClosed = true; outbound.done(); } };
+    try {
+        const skipped = options.skipSendIfEmpty && !text;
+        const since = options.since;
+        const alreadyDelivered = !skipped && since !== undefined
+            && wasSelfDelivered({ target, text, since });
+        const sent: { ok: boolean; ts?: string } = skipped ? { ok: false }
+            : alreadyDelivered ? { ok: true }
+            : await sendSlackText(token, target, text, {
+                signal: outbound.signal, ...(requireBodyDelivery ? { requireBodyDelivery: true } : {}),
+                onPosted: async () => {
+                    // Every chunk is posted, so the answer is visible. Settle the
+                    // ACK here: readback verification can take seconds per chunk
+                    // and must not hold the reaction on running (#417).
+                    bodySucceeded = true;
+                    report();
+                    const early = bodyProgressOutcome(data, true, executionOutcome(), !current());
+                    await settleAck(early === 'complete' ? 'success' : 'failure');
+                },
+            });
+        bodySucceeded = sent.ok;
+        bodyConfirmed = alreadyDelivered || (sent.ok && Boolean(sent.ts));
+        report();
+        // The queued path closes the body registration before settling, so a late
+        // image upload cannot keep the turn's outbound slot open.
+        if (options.relayMode === 'isolated') closeOutbound();
+        const outcome = bodyProgressOutcome(data, bodySucceeded, executionOutcome(), !current());
+        if (bodySucceeded && target.threadId) markThreadParticipated(target.targetId, target.threadId);
+        await settleAck(bodySucceeded && outcome === 'complete' ? 'success' : 'failure');
+        await display.finish(outcome, { bodyDelivered: bodyConfirmed });
+        if (current() && (options.relayWhenTextEmpty || Boolean(text))) {
+            if (options.relayMode === 'isolated') {
+                const relay = slackOutboundRegistry.start(signal);
+                try { await relaySlackImages(token, target, text, { signal: relay.signal }); }
+                catch (error) { options.onRelayError?.(error); }
+                finally { relay.done(); }
+            } else {
+                await relaySlackImages(token, target, text, { signal: outbound.signal });
+            }
+        }
+        if (!skipped) options.onSent?.(alreadyDelivered);
+        return { delivered: bodySucceeded, confirmed: bodyConfirmed, outcome };
+    } finally { closeOutbound(); }
 }
 
 function buildSlackFileFailureWarning(failed: readonly FailedSlackFile[], allFailed = false): string | null {
