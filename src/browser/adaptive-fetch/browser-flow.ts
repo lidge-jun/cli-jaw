@@ -1,5 +1,7 @@
 import type { AdaptiveFetchOptions, AttemptTrace, ChallengeInfo, ReaderCandidate } from './types.js';
-import { validateFetchUrl } from './safety.js';
+import { assertPublicResolvedHost, validateFetchUrl } from './safety.js';
+
+import type { ResolveHost } from './safety.js';
 import {
     collectBrowserCandidate,
     collectBrowserMetadataCandidate,
@@ -27,8 +29,29 @@ export async function tryBrowserEscalation(
 
     const allCandidates: ReaderCandidate[] = [];
 
-    const camoufoxResult = await fetchViaCamoufox(url, { timeoutMs: options.timeoutMs, ...(signal ? { signal } : {}) });
-    if (camoufoxResult?.ok && camoufoxResult.html && isSafeFinalUrl(camoufoxResult.url || url, options)) {
+    const resolveHost = deps['resolveHost'] as ResolveHost | undefined;
+    const camoufoxResult = await fetchViaCamoufox(url, {
+        timeoutMs: options.timeoutMs,
+        allowPrivateNetwork: options.allowPrivateNetwork,
+        ...(resolveHost ? { resolveHost } : {}),
+        ...(signal ? { signal } : {}),
+    });
+    // A missing final URL is no longer treated as "the original target": the
+    // whole point of the guard is that the post-navigation URL decides, so an
+    // absent one means the result cannot be cleared and is dropped.
+    const camoufoxFinalUrl = camoufoxResult?.url || '';
+    const camoufoxFinalUrlSafe = camoufoxFinalUrl
+        ? await isSafeFinalUrl(camoufoxFinalUrl, options, resolveHost)
+        : false;
+    if (camoufoxResult?.ok && camoufoxResult.html && !camoufoxFinalUrlSafe) {
+        appendAttempt(trace, {
+            source: 'camoufox',
+            verdict: 'blocked',
+            url: camoufoxFinalUrl || url,
+            reason: camoufoxFinalUrl ? 'camoufox-final-url-private' : 'camoufox-final-url-missing',
+        });
+    }
+    if (camoufoxResult?.ok && camoufoxResult.html && camoufoxFinalUrlSafe) {
         const structured = extractStructuredContent(camoufoxResult.html);
         const evidence = ['camoufox-stealth'];
         if (structured.tables.length) evidence.push(`structured:${structured.tables.length}-tables`);
@@ -36,17 +59,17 @@ export async function tryBrowserEscalation(
         appendAttempt(trace, { source: 'camoufox', verdict: 'ok', url, reason: 'camoufox-stealth' });
 
         const camoufoxCandidate = fromBrowserResult({
-            ok: true, status: 200, finalUrl: camoufoxResult.url || url,
+            ok: true, status: 200, finalUrl: camoufoxFinalUrl,
             contentType: 'text/html', text: camoufoxResult.html,
             title: camoufoxResult.title, headers: {}, evidence, warnings: [],
             structured, label: 'camoufox-stealth',
         });
         const scored = scoreReaderCandidate(camoufoxCandidate);
-        appendScoredAttempt(trace, 'camoufox', camoufoxCandidate, { finalUrl: camoufoxResult.url || url, status: 200, label: 'camoufox-stealth' });
+        appendScoredAttempt(trace, 'camoufox', camoufoxCandidate, { finalUrl: camoufoxFinalUrl, status: 200, label: 'camoufox-stealth' });
         allCandidates.push(camoufoxCandidate);
 
         if (scored.verdict === 'strong_ok') {
-            return buildBrowserFlowResult(url, camoufoxResult, structured, evidence, allCandidates);
+            return buildBrowserFlowResult(camoufoxFinalUrl, camoufoxResult, structured, evidence, allCandidates);
         }
     } else if (camoufoxResult === null) {
         appendAttempt(trace, { source: 'camoufox', verdict: 'skip', url, reason: 'camoufox-not-available' });
@@ -60,6 +83,7 @@ export async function tryBrowserEscalation(
             selector: options.selector,
             allowPrivateNetwork: options.allowPrivateNetwork,
             challengeInfo,
+            ...(resolveHost ? { resolveHost } : {}),
             ...(signal ? { signal } : {}),
         });
         appendScoredAttempt(trace, 'browser', fromBrowserResult(result), result);
@@ -92,14 +116,14 @@ export async function tryBrowserEscalation(
 }
 
 function buildBrowserFlowResult(
-    url: string,
+    finalUrl: string,
     camoufoxResult: { html: string; title: string; url: string },
     structured: { tables: unknown[]; jsonLd: unknown[] },
     evidence: string[],
     _candidates: ReaderCandidate[],
 ): Record<string, unknown> {
     return {
-        ok: true, status: 200, finalUrl: camoufoxResult.url || url,
+        ok: true, status: 200, finalUrl,
         contentType: 'text/html', text: camoufoxResult.html,
         title: camoufoxResult.title, headers: {}, evidence, warnings: [], structured,
     };
@@ -115,9 +139,18 @@ function buildCandidateOnlyResult(url: string, candidates: ReaderCandidate[]): R
     };
 }
 
-function isSafeFinalUrl(finalUrl: string, options: AdaptiveFetchOptions): boolean {
+async function isSafeFinalUrl(
+    finalUrl: string,
+    options: AdaptiveFetchOptions,
+    resolveHost?: ResolveHost,
+): Promise<boolean> {
     try {
         validateFetchUrl(finalUrl, { allowPrivateNetwork: options.allowPrivateNetwork });
+        // A literal check alone would still accept a public-looking name that
+        // resolves to loopback or cloud metadata, which is the rebinding case.
+        if (options.allowPrivateNetwork !== true) {
+            await assertPublicResolvedHost(finalUrl, resolveHost, { sensitiveQuery: 'allow' });
+        }
         return true;
     } catch {
         return false;

@@ -5,7 +5,7 @@ import { releaseFetchBrowserPage, getFetchBrowserPage } from './browser-runtime.
 import { classifyAccessBoundary, detectChallengeMarkers } from './challenge-detector.js';
 import { runDefuddleInPage } from './defuddle-extractor.js';
 import { extractMetadataFromHtml } from './metadata.js';
-import { validateFetchUrl } from './safety.js';
+import { assertPublicResolvedHost, validateFetchUrl } from './safety.js';
 import { normalizeWhitespace } from './transforms.js';
 import { classifyBoundarySignals } from './validators.js';
 
@@ -22,6 +22,22 @@ export async function collectBrowserCandidate(url: string, options: BrowserCandi
     if (options.signal?.aborted) {
         await releaseFetchBrowserPage(pageRef);
         return { source: 'browser', label: 'browser-render', ok: false, status: 0, finalUrl: url, text: '', title: '', evidence: ['deadline-aborted'], warnings: ['deadline-aborted'] };
+    }
+    // page.goto follows redirects inside the browser, so the post-navigation
+    // check further down cannot un-send the request. Clearing the entry URL
+    // here closes the DNS-rebinding case; an intermediate hop the browser
+    // followed on its own stays out of reach and is a recorded residual risk.
+    if (options.allowPrivateNetwork !== true) {
+        try {
+            await assertPublicResolvedHost(url, options.resolveHost, { sensitiveQuery: 'allow' });
+        } catch (error: unknown) {
+            await releaseFetchBrowserPage(pageRef);
+            return {
+                source: 'browser', label: 'browser-render', ok: false, status: 0, finalUrl: url,
+                text: '', title: '', evidence: ['entry-url-private'],
+                warnings: [(error as Error).message || 'entry-url-private'],
+            };
+        }
     }
     // P0-6: close the page if the overall deadline fires so a hung page.goto rejects.
     const onDeadlineAbort = (): void => { try { page.close?.(); } catch { /* page already closing */ } };

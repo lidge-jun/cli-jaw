@@ -1,5 +1,8 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { assertPublicResolvedHost, validateFetchUrl } from './safety.js';
+
+import type { ResolveHost } from './safety.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -39,15 +42,28 @@ export interface CamoufoxResult {
     ok: boolean;
     html: string;
     title: string;
+    /** The URL the page ended on after navigation, i.e. Playwright page.url. */
     url: string;
+    /** The URL we asked for, kept so a trace can still show the original target. */
+    requestedUrl: string;
 }
 
 export async function fetchViaCamoufox(
     url: string,
-    options?: { timeoutMs?: number; signal?: AbortSignal },
+    options?: { timeoutMs?: number; signal?: AbortSignal; resolveHost?: ResolveHost; allowPrivateNetwork?: boolean },
 ): Promise<CamoufoxResult | null> {
     // P0-6: bail before spawning if the overall deadline already fired.
     if (options?.signal?.aborted) return null;
+    // Nothing downstream can un-send a navigation, so the entry URL is cleared
+    // before the browser is spawned rather than after it has already loaded.
+    try {
+        validateFetchUrl(url, { allowPrivateNetwork: options?.allowPrivateNetwork === true });
+        if (options?.allowPrivateNetwork !== true) {
+            await assertPublicResolvedHost(url, options?.resolveHost, { sensitiveQuery: 'allow' });
+        }
+    } catch {
+        return null;
+    }
     const available = await detectCamoufox();
     if (!available) return null;
 
@@ -63,7 +79,10 @@ export async function fetchViaCamoufox(
         '    page.goto(url, timeout=timeout)',
         '    title = page.title()',
         '    html = page.content()',
-        '    print(json.dumps({"ok": True, "title": title, "html": html, "url": url}))',
+        // page.url is the post-navigation URL. Reporting the INPUT url here is
+        // what let a redirect to a private host pass the caller's final-URL
+        // check while its HTML was already in hand.
+        '    print(json.dumps({"ok": True, "title": title, "html": html, "url": page.url, "requestedUrl": url}))',
     ].join('\n');
 
     try {

@@ -2,7 +2,9 @@
 
 import type { ReaderCandidate } from './types.js';
 import { getFetchBrowserPage, closeFetchBrowserPage } from './browser-runtime.js';
-import { validateFetchUrl } from './safety.js';
+import { assertPublicResolvedHost, validateFetchUrl } from './safety.js';
+
+import type { ResolveHost } from './safety.js';
 
 interface BrowserDepsOption {
     browserDeps?: Record<string, unknown>;
@@ -19,6 +21,7 @@ interface NavigateOptions {
     timeoutMs?: number;
     selector?: string | null;
     allowPrivateNetwork?: boolean;
+    resolveHost?: ResolveHost;
 }
 
 export function isUserSessionAvailable(options: BrowserDepsOption = {}): boolean {
@@ -39,6 +42,12 @@ export function shouldTryUserSession(candidates: ReaderCandidate[], options: Ses
 }
 
 export async function navigateInUserSession(url: string, options: NavigateOptions) {
+    // The existing-session navigation carries the user's real cookies, so a
+    // rebound entry URL would send them to a private address and only the body
+    // would be discarded afterwards. Clear the entry before the page is taken.
+    if (options.allowPrivateNetwork !== true) {
+        await assertPublicResolvedHost(url, options.resolveHost, { sensitiveQuery: 'allow' });
+    }
     const pageRef = await getFetchBrowserPage({
         ...(options.browserDeps != null ? { browserDeps: options.browserDeps } : {}),
         browserSession: 'existing' as const,
@@ -66,6 +75,9 @@ export async function navigateInUserSession(url: string, options: NavigateOption
         const warnings: string[] = [];
         try {
             validateFetchUrl(finalUrl, options.allowPrivateNetwork != null ? { allowPrivateNetwork: options.allowPrivateNetwork } : {});
+            if (options.allowPrivateNetwork !== true) {
+                await assertPublicResolvedHost(finalUrl, options.resolveHost, { sensitiveQuery: 'allow' });
+            }
         } catch {
             warnings.push('user-session-redirected-to-private-url');
             return {

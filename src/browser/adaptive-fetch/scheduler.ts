@@ -2,10 +2,13 @@ import type { AdaptiveFetchOptions, CandidateUrl, ChallengeInfo, ReaderCandidate
 import type { StageContext, AdaptiveFetchFinalResult } from './stage-types.js';
 import type { ScoredResult } from './content-scorer.js';
 import { validateFetchUrl } from './safety.js';
+
+import type { ResolveHost } from './safety.js';
 import { appendAttempt, createAttemptTrace, summarizeAttempts } from './trace.js';
 import { resolvePublicEndpointCandidates } from './endpoint-resolvers.js';
 import { fetchTextCandidate } from './fetcher.js';
 import { tlsFetch } from './tls-fetch.js';
+import type { TlsFetchOptions } from './tls-fetch.js';
 import { ytdlpMetadata, ytdlpSubtitles, formatYtdlpEvidence } from './ytdlp-reader.js';
 import { fromFetchResult, fromUserSessionResult, fromHumanResolvedResult } from './reader-adapters.js';
 import { chooseBestReaderCandidate, scoreReaderCandidate } from './content-scorer.js';
@@ -34,7 +37,12 @@ export async function executeAdaptiveFetch(
         browserSession: options.browserSessionRaw || options.browserSession,
     });
     const fetchImpl = deps['fetch'] as typeof fetch | undefined;
-    const fetchOpt = { ...(fetchImpl ? { fetchImpl } : {}), ...(options.proxy ? { proxy: options.proxy } : {}) };
+    const resolveHost = deps['resolveHost'] as ResolveHost | undefined;
+    const fetchOpt = {
+        ...(fetchImpl ? { fetchImpl } : {}),
+        ...(resolveHost ? { resolveHost } : {}),
+        ...(options.proxy ? { proxy: options.proxy } : {}),
+    };
 
     appendAttempt(trace, {
         source: 'validation',
@@ -115,9 +123,13 @@ async function runDirectFetchStage(ctx: StageContext): Promise<void> {
 
         if (candidate.source === 'ytdlp') {
             try {
-                const meta = await ytdlpMetadata(candidate.url, { timeoutMs: ctx.options.timeoutMs });
+                const ytdlpOpts = {
+                    timeoutMs: ctx.options.timeoutMs,
+                    ...(ctx.deps['resolveHost'] ? { resolveHost: ctx.deps['resolveHost'] as ResolveHost } : {}),
+                };
+                const meta = await ytdlpMetadata(candidate.url, ytdlpOpts);
                 if (meta) {
-                    const subs = await ytdlpSubtitles(candidate.url, 'en', { timeoutMs: ctx.options.timeoutMs });
+                    const subs = await ytdlpSubtitles(candidate.url, 'en', ytdlpOpts);
                     const text = formatYtdlpEvidence(meta, subs);
                     const evidence = subs ? ['ytdlp-metadata', 'ytdlp-transcript'] : ['ytdlp-metadata'];
                     fetched = { ok: true, status: 200, finalUrl: candidate.url, contentType: 'text/plain', text, headers: {}, evidence, warnings: [] };
@@ -137,6 +149,9 @@ async function runDirectFetchStage(ctx: StageContext): Promise<void> {
                     timeoutMs: ctx.options.timeoutMs,
                     allowPrivateNetwork: ctx.options.allowPrivateNetwork,
                     identity: ctx.options.identity,
+                    // Direct fetch goes to the target host itself, where a
+                    // signed URL legitimately carries its own token.
+                    sensitiveQuery: 'allow',
                     ...ctx.fetchOpt,
                 }) as unknown as Record<string, unknown>;
             } catch (error: unknown) {
@@ -170,8 +185,9 @@ async function runDirectFetchStage(ctx: StageContext): Promise<void> {
         }
 
         if (candidate.source === 'fetch' && !fetched['ok'] && (fetched['status'] === 403 || fetched['status'] === 429 || ctx.challenge)) {
-            const tlsOpts: { timeoutMs?: number; maxBytes?: number; proxy?: string } = { timeoutMs: ctx.options.timeoutMs, maxBytes: ctx.options.maxBytes };
+            const tlsOpts: TlsFetchOptions = { timeoutMs: ctx.options.timeoutMs, maxBytes: ctx.options.maxBytes };
             if (ctx.options.proxy) tlsOpts.proxy = ctx.options.proxy;
+            if (ctx.deps['resolveHost']) tlsOpts.resolveHost = ctx.deps['resolveHost'] as ResolveHost;
             const tlsResult = await tlsFetch(candidate.url, tlsOpts);
             if (tlsResult?.ok) {
                 appendAttempt(ctx.trace, { source: 'tls-fetch', verdict: 'ok', url: candidate.url, status: tlsResult.status, reason: `tls-profile:${tlsResult.profile}` });
@@ -224,6 +240,7 @@ async function runDiscoveredEndpointStage(ctx: StageContext): Promise<void> {
                 timeoutMs: ctx.options.timeoutMs,
                 allowPrivateNetwork: ctx.options.allowPrivateNetwork,
                 identity: ctx.options.identity,
+                sensitiveQuery: 'allow',
                 ...ctx.fetchOpt,
             }) as unknown as Record<string, unknown>;
         } catch (error: unknown) {
@@ -320,12 +337,13 @@ async function runUserSessionStage(ctx: StageContext): Promise<void> {
     if (ctx.signal.aborted) return; // P0-6: skip the user-session tail past the deadline
 
     try {
-        const userResult = await navigateInUserSession(ctx.url.href, {
-            browserDeps: ctx.deps,
-            timeoutMs: ctx.options.timeoutMs,
-            selector: ctx.options.selector,
-            allowPrivateNetwork: ctx.options.allowPrivateNetwork,
-        });
+            const userResult = await navigateInUserSession(ctx.url.href, {
+                browserDeps: ctx.deps,
+                timeoutMs: ctx.options.timeoutMs,
+                selector: ctx.options.selector,
+                allowPrivateNetwork: ctx.options.allowPrivateNetwork,
+                ...(ctx.deps['resolveHost'] ? { resolveHost: ctx.deps['resolveHost'] as ResolveHost } : {}),
+            });
         ctx.candidates.push(fromUserSessionResult(userResult as unknown as Record<string, unknown>));
         ctx.chromeUsed = true;
         appendAttempt(ctx.trace, {
@@ -511,4 +529,3 @@ function hasUnresolvedChallenge(candidates: ReaderCandidate[], best: ScoredResul
         c.challenge?.type === 'paywall'
     ) || (best != null && ['challenge', 'auth_required', 'paywall', 'blocked'].includes(best.verdict as string));
 }
-

@@ -1,6 +1,6 @@
 // Mirrored from agbrowse adaptive-fetch v2; keep runtime behavior aligned while cli-jaw mirror remains experimental.
 
-import { DEFAULT_MAX_BYTES, DEFAULT_REDIRECT_LIMIT, DEFAULT_TIMEOUT_MS, redactHeaders, validateFetchUrl } from './safety.js';
+import { assertPublicResolvedHost, DEFAULT_MAX_BYTES, DEFAULT_REDIRECT_LIMIT, DEFAULT_TIMEOUT_MS, redactHeaders, validateFetchUrl } from './safety.js';
 import { isTextualContentType } from './transforms.js';
 
 import type { FetchTextCandidateOptions } from './types.js';
@@ -29,6 +29,17 @@ export async function fetchTextCandidate(rawUrl: string, options: FetchTextCandi
     const safetyOpts = options.allowPrivateNetwork != null ? { allowPrivateNetwork: options.allowPrivateNetwork } : {};
     let current = validateFetchUrl(rawUrl, safetyOpts).href;
     for (let redirects = 0; redirects <= redirectLimit; redirects += 1) {
+        // validateFetchUrl above only inspects the literal hostname, so a name
+        // that resolves to loopback or link-local still reaches the socket.
+        // This guard runs on EVERY hop and deliberately sits ahead of the
+        // caller-supplied beforeFetch hook rather than being it: a caller that
+        // passes no hook, or a no-op hook, cannot switch the DNS check off. The
+        // only way out is an explicit allowPrivateNetwork === true.
+        if (options.allowPrivateNetwork !== true) {
+            await assertPublicResolvedHost(current, options.resolveHost, {
+                sensitiveQuery: options.sensitiveQuery ?? 'reject',
+            });
+        }
         await options.beforeFetch?.(current);
         const response = await fetchImpl(current, {
             redirect: 'manual',
