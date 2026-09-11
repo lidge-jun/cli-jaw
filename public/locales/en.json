@@ -973,5 +973,7 @@
   "slack.progress.status.unconfirmed": "Unconfirmed",
   "slack.progress.deliveryComplete": "Answer delivered",
   "slack.progress.deliveryFailed": "Answer delivery could not be confirmed",
-  "slack.progress.deliveryUnconfirmed": "Answer delivery unconfirmed"
+  "slack.progress.deliveryUnconfirmed": "Answer delivery unconfirmed",
+  "slack.workflow.unavailable": "The automation was not run because its sender/request information or the designated enabled skill could not be verified. Check the configuration.",
+  "slack.workflow.unconfirmed": "The registered workflow returned no substantive result. Work may already have begun; inspect its records before retrying."
 }

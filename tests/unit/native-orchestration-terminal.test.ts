@@ -98,6 +98,26 @@ test('untagged print pipeline retains existing text and omits native tags', asyn
     assert.equal('traceRunId' in payload, false);
 });
 
+for (const native of [false, true]) {
+for (const text of ['', 'An automated notice.\n[SILENT]', 'Completed with a task receipt.']) {
+    test(`configured workflow settles silent output as unconfirmed without changing provider text (native=${native}, text=${JSON.stringify(text)})`, async () => {
+        const workflow = { skillId: 'example-work', skillSha256: 'a'.repeat(64), channelId: 'C123',
+            senderUserId: 'U123', senderBotId: 'B123', messageTs: '100.2', threadTs: '100.1', markers: ['EXAMPLE_WORK_V1'] };
+        const target = { channel: 'slack', targetKind: 'channel', peerKind: 'group', targetId: 'C123', threadId: '100.1' };
+        let spawns = 0;
+        const result = { text, code: 0, ...(native ? { runtimeOutcome: { status: 'done' as const, finalText: text, partialText: '' } } : {}) };
+        admitRequest(identity.requestId, identity.scope);
+        await orchestrate('operator-configured workflow', { ...options(result, () => { spawns++; }), target, slackWorkflow: workflow });
+        const silent = !text || text.includes('[SILENT]');
+        assert.equal(event('orchestrate_done')['workflowUnconfirmed'], silent ? true : undefined);
+        assert.equal(event('orchestrate_done')['text'], text);
+        assert.equal(event('request_settled')['outcome'], silent ? 'failed' : 'completed');
+        assert.equal(spawns, 1, 'unconfirmed work is never automatically run again');
+        assert.equal(result.text, text);
+    });
+}
+}
+
 test('normal native pipeline carries the lifecycle traceRunId on its second terminal', async () => {
     const runId = 'tr_native_terminal_same_identity';
     await orchestrate('native task', options({ text: 'answer', code: 0, traceRunId: runId,

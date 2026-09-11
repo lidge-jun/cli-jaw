@@ -24,6 +24,7 @@ import { buildRemoteBindingKey, normalizedThreadId, type SessionScope } from '..
 import { sessionLanes } from './session-lanes.js';
 import { admitRequest, settleOnce } from './request-registry.js';
 import { beginSteerInput } from '../agent/steer-input-guard.js';
+import type { SlackWorkflowMetadata } from '../slack/workflow.js';
 
 export type SubmitResult = {
     action: 'started' | 'queued' | 'rejected';
@@ -48,6 +49,7 @@ export function publicSubmitResult(result: SubmitResult): SubmitResult {
 }
 
 type SubmitMeta = {
+    slackWorkflow?: SlackWorkflowMetadata;
     onAdmitted?: (binding: { requestId: string; scope: string; chatSessionId: string }) => void;
     origin: RuntimeOrigin;
     displayText?: string;
@@ -93,6 +95,7 @@ function applyMidRunPolicy(
             ...(ctx.remoteKey ? { remoteKey: ctx.remoteKey } : {}),
             overrides: ctx.meta.overrides,
             replyViaTarget: ctx.meta.replyViaTarget,
+            slackWorkflow: ctx.meta.slackWorkflow,
             ...extra,
         }));
         return { action: 'queued', pending: messageQueue.length, queued: true, requestId: ctx.requestId, queuedId, sessionContext };
@@ -113,7 +116,8 @@ function applyMidRunPolicy(
         // dying silently. Queue is the fallback only for in-band failures,
         // never for missing capability.
         const steerMeta = stripUndefined({ chatSessionId: ctx.chatSessionId, target: ctx.meta.target,
-            chatId: ctx.meta.chatId, requestId: ctx.requestId, remoteKey: ctx.remoteKey, replyViaTarget: ctx.meta.replyViaTarget });
+            chatId: ctx.meta.chatId, requestId: ctx.requestId, remoteKey: ctx.remoteKey, replyViaTarget: ctx.meta.replyViaTarget,
+            slackWorkflow: ctx.meta.slackWorkflow });
         const inputGuard = beginSteerInput(ctx.scopeKey);
         runDetached(
             steerAgent(ctx.scopeKey, ctx.text, ctx.meta.origin, steerMeta).then(outcome => {

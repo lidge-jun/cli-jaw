@@ -1243,11 +1243,17 @@ top-level 채널은 현재 event ts 직전의 `conversations.history`를 세션 
 
 ### trusted bot triggers (`events.ts`)
 
-`slack.trustedBotTriggers`는 다른 봇 하나가 이 인스턴스의 턴을 시작할 수 있게 하는 운영자 선언 목록이다. 규칙은 `{channelId, botId, userId, textMarker}` 네 키뿐이며 각각 `^[CG][A-Z0-9]{2,}$`, `^B[A-Z0-9]{2,}$`, `^[UW][A-Z0-9]{2,}$`, `^[A-Z][A-Z0-9_]{2,63}$`를 만족해야 한다. 목록은 최대 16개이고 **하나라도 어긋나면 전체가 무효**다 — 인바운드 권한 설정의 오타는 절반만 살아 있는 상태보다 닫히는 쪽이 낫다.
+`slack.trustedBotTriggers`는 다른 봇 하나가 이 인스턴스의 턴을 시작할 수 있게 하는 운영자 선언 목록이다. 규칙은 `{channelId, botId, userId, textMarker}` 네 필수 키와 선택적 `workflowSkill`만 허용한다. 네 필수 값은 각각 `^[CG][A-Z0-9]{2,}$`, `^B[A-Z0-9]{2,}$`, `^[UW][A-Z0-9]{2,}$`, `^[A-Z][A-Z0-9_]{2,63}$`를 만족해야 한다. 목록은 최대 16개이고 **하나라도 어긋나면 전체가 무효**다 — 인바운드 권한 설정의 오타는 절반만 살아 있는 상태보다 닫히는 쪽이 낫다.
 
-매칭은 이벤트가 자기 자신을 멘션하고, `bot_id`/`bot_profile.id`와 `user`/`bot_profile.user_id`가 서로 모순되지 않으며, 삭제된 프로필이 아니고, 어떤 규칙이 채널·봇·발신자·마커 단어와 정확히 맞을 때만 성립한다. 마커는 공백 단위 단어 비교라 `REELBRAIN_MEDIA_V1X`가 `REELBRAIN_MEDIA_V1`을 만족시키지 않는다.
+매칭은 이벤트가 자기 자신을 멘션하고, `bot_id`/`bot_profile.id`와 `user`/`bot_profile.user_id`가 서로 모순되지 않으며, 삭제된 프로필이 아니고, 어떤 규칙이 채널·봇·발신자·마커 단어와 정확히 맞을 때만 성립한다. 마커는 공백 단위 단어 비교라 `EXAMPLE_WORK_V1`은 더 긴 단어의 일부로 매칭되지 않는다.
 
 일치는 정확히 세 거부만 연다: `bot_message` subtype 무시, `allowBots:false` 거부, 그리고 `mention_via_app_mention` 중복 제거. self-echo, 채널 누락, 대화 허용목록, `mentionOnly`, empty-event 검사는 그대로다. 중복 제거를 열어도 실행은 한 번인데, `bot.ts`가 dispatch 전에 `slackEventKey(teamId, channel, ts)`를 선점하므로 같은 글의 `app_mention`/`message` 두 봉투가 하나로 접힌다. `isSlackMention()` 자체는 넓히지 않는다 — 그 함수는 thread 참여 소유권도 정하기 때문에, 넓히면 #400이 고친 과잉 응답이 되돌아온다.
+
+선택적 `workflowSkill`은 실제 이벤트의 발신자·채널·봇 사용자·마커와 자기 멘션이 모두 맞은 뒤 운영자가 설정한 실행 경로를 선택한다. 메시지 본문으로 다른 스킬을 고를 수 없다. 네 키만 있는 기존 규칙은 기존 동작을 유지한다. 선택된 활성 스킬만 최대 64 KiB로 읽으며, 발신·요청 정보를 확인할 수 없거나(`source_unavailable`), 스킬을 사용할 수 없거나(`skill_unavailable`), 선택이 모호하면(`ambiguous`) `slack.workflow.unavailable`로 차단을 알리고 모델로 대체하지 않는다. 일반 승인·도구 권한·원본 접근 권한은 그대로다.
+
+선택된 스킬은 요청 수락(admission) 시점에 읽고, 캡처한 내용·해시·출처 메타데이터를 큐 대기와 재시작 이후에도 보존한다. 이 기능을 선택한 워크플로 요청은 busy 상태에서 `followup` 큐로 보내며, 관련 없는 실행 중 턴에 steer하거나 collect로 합치지 않는다.
+
+등록 워크플로의 결과가 비었거나 단독 `SILENT`이면 `slack.workflow.unconfirmed` 안내와 실패 ACK로 끝낸다. 워크플로 요청은 unconfirmed/failed로 판정하되 provider/native의 최종 텍스트와 상태는 보존한다. 이미 작업이 시작되었을 수 있으므로 자동 재실행하지 않고 기록을 확인한 뒤 재시도한다. AI 답변 수신만으로 업무 완료를 판정하지 않는다.
 
 ### mention-watch.ts (345L)
 

@@ -1,13 +1,14 @@
 import { verifiedSlackWorkspace } from './verified-workspace.js';
 import { slackCredentialKey, type SlackToolSource } from './tool-context.js';
 import { isSlackMention, matchesTrustedBotTrigger, readTrustedBotTriggers } from './events.js';
+import { captureSlackWorkflow, prepareSlackWorkflow, renderSlackWorkflow, isWorkflowReplyUnconfirmed, workflowDiagnosticText, type SlackWorkflowMetadata, type SlackWorkflowSelection } from './workflow.js';
 // ─── Slack Bot ───────────────────────────────────────
 // Slack transport implementation for the cli-jaw messaging runtime.
 // Mirrors src/discord/bot.ts structurally: init/shutdown lifecycle, an inbound
 // handler that gates then dispatches into submitMessage/orchestrateAndCollect,
 // and a forwarder for non-Slack-origin agent output.
 
-import { JAW_HOME, isSettingsPersistenceBlocked, readPersistedSlackAttachPort, saveSettings, settings } from '../core/config.js';
+import { JAW_HOME, SKILLS_DIR, isSettingsPersistenceBlocked, readPersistedSlackAttachPort, saveSettings, settings } from '../core/config.js';
 import { withSessionScope } from '../core/session-context.js';
 import { log } from '../core/logger.js';
 import { t, normalizeLocale } from '../core/i18n.js';
@@ -435,6 +436,7 @@ function bodyProgressOutcome(
     const native = requiresNativeBodyDelivery(data);
     if ((native && data['runtimeStatus'] === 'stopped') || (!native && data['executionInterrupted'] === true) || latched === 'cancelled') return 'cancelled';
     if (data['collectionFailure'] === 'timeout') return 'expired';
+    if (data['workflowUnconfirmed'] === true) return 'error';
     if ((native && data['runtimeStatus'] === 'error') || (!native && data['executionFailed'] === true)
         || data['collectionFailure'] === 'error' || (!native && data['error'] === true) || latched === 'error') return 'error';
     if (!delivered) return stopping ? 'expired' : 'error';
@@ -442,6 +444,7 @@ function bodyProgressOutcome(
 }
 
 type SlackReplyOptions = {
+    workflow?: SlackWorkflowMetadata;
     token: string; target: RemoteTarget; requestId: string;
     session: { scope: string; chatSessionId: string; remoteKey?: string };
     locale: ReturnType<typeof currentLocale>; generation: number; signal: AbortSignal;
@@ -624,11 +627,15 @@ function trackSlackReply(options: SlackReplyOptions): void {
             return sessionLanes.runDetachedTurn(session.scope, async () => {
             let delivered = false;
             let confirmedDelivery = false;
+            let outcomeData = data;
             try {
                 if (!current()) { await Promise.allSettled([display.finish(executionOutcome ?? 'expired'), settleAck('failure')]); return; }
                 const requireBodyDelivery = requiresNativeBodyDelivery(data);
                 const rawText = String(data['text'] ?? '');
-                const text = data['error'] === true && !requireBodyDelivery ? t('slack.progress.failure', {}, locale)
+                const unconfirmed = data['workflowUnconfirmed'] === true || Boolean(options.workflow && isWorkflowReplyUnconfirmed(rawText, data));
+                if (unconfirmed) outcomeData = { ...data, workflowUnconfirmed: true };
+                const text = unconfirmed ? workflowDiagnosticText(rawText, t('slack.workflow.unconfirmed', {}, locale))
+                    : data['error'] === true && !requireBodyDelivery ? t('slack.progress.failure', {}, locale)
                     : requireBodyDelivery && !rawText.trim() ? '' : rawText;
                 display.phase('delivering');
                 // Same rule as the direct path, and now literally the same code:
@@ -636,7 +643,7 @@ function trackSlackReply(options: SlackReplyOptions): void {
                 // come from, and in keeping the image relay off the body's
                 // cancellation domain (#686).
                 await deliverSlackTurnBody({
-                    token, target, text, data, signal, display, settleAck, current,
+                    token, target, text, data: outcomeData, signal, display, settleAck, current,
                     executionOutcome: () => executionOutcome,
                     since: anchor ?? observedAnchor,
                     skipSendIfEmpty: true,
@@ -649,7 +656,7 @@ function trackSlackReply(options: SlackReplyOptions): void {
                 log.error('[slack:queue-send]', logErrorText(error));
                 await Promise.allSettled([
                     settleAck('failure'),
-                    display.finish(bodyProgressOutcome(data, delivered, executionOutcome, !current()), { bodyDelivered: confirmedDelivery }),
+                    display.finish(bodyProgressOutcome(outcomeData, delivered, executionOutcome, !current()), { bodyDelivered: confirmedDelivery }),
                 ]);
             }
             });
@@ -718,7 +725,9 @@ function installSlackTargetReplyForwarder(): void {
         if (!token) return;
         const generation = lifecycleGeneration;
         const requireBodyDelivery = admitted.requireBodyDelivery;
-        const text = data['error'] === true && !requireBodyDelivery
+        const text = data['workflowUnconfirmed'] === true
+            ? workflowDiagnosticText(String(data['text'] ?? ''), t('slack.workflow.unconfirmed', {}, currentLocale()))
+            : data['error'] === true && !requireBodyDelivery
             ? t('slack.progress.failure', {}, currentLocale()) : String(data['text'] ?? '');
         const requestId = admitted.requestId;
         const scope = slackReplyDelivery.scope(requestId, target)
@@ -763,6 +772,7 @@ async function slackOrchestrate(
     displayMsg: string,
     signal: AbortSignal,
     dedupe: {
+        workflow?: SlackWorkflowMetadata;
         toolSource?: SlackToolSource;
         eventKey?: string;
         reservationGeneration?: number;
@@ -806,6 +816,7 @@ async function slackOrchestrate(
     try {
         result = admitSlackRun({
         target, prompt, displayText: displayMsg, chatId,
+        ...(dedupe.workflow ? { workflow: dedupe.workflow } : {}),
         ...(dedupe.toolSource ? { toolSource: dedupe.toolSource } : {}),
         ...(dedupe.preResolvedScope !== undefined
             ? { preResolvedScope: dedupe.preResolvedScope } : {}),
@@ -849,6 +860,7 @@ async function slackOrchestrate(
                     { scope: ctx.scope, chatSessionId: ctx.chatSessionId },
                     () => orchestrateAndCollectData(prompt, {
                         origin: 'slack', target, chatId, requestId: ctx.requestId,
+                        ...(dedupe.workflow ? { slackWorkflow: dedupe.workflow } : {}),
                         ...(dedupe.toolSource ? { _strictRequestOwnership: true } : {}),
                         ...(ctx.remoteKey ? { remoteKey: ctx.remoteKey } : {}),
                         chatSessionId: ctx.chatSessionId, scope: ctx.scope, _skipInsert: true,
@@ -864,7 +876,10 @@ async function slackOrchestrate(
                     await settleAck('success');
                     return;
                 }
-                const text = collected.data.collectionFailure === 'error' ? t('slack.progress.failure', {}, locale)
+                const unconfirmed = resultData['workflowUnconfirmed'] === true || Boolean(dedupe.workflow && isWorkflowReplyUnconfirmed(collected.text, resultData));
+                if (unconfirmed) resultData = { ...resultData, workflowUnconfirmed: true };
+                const text = unconfirmed ? workflowDiagnosticText(collected.text, t('slack.workflow.unconfirmed', {}, locale))
+                    : collected.data.collectionFailure === 'error' ? t('slack.progress.failure', {}, locale)
                     : collected.data.collectionFailure === 'timeout' ? t('tg.timeout', {}, locale) : collected.text;
                 display.phase('delivering');
                 await deliverSlackTurnBody({
@@ -914,6 +929,7 @@ async function slackOrchestrate(
         const requestId = result.requestId;
         if (!requestId) { await ack?.settle('failure'); return; }
         const options: SlackReplyOptions = {
+            ...(dedupe.workflow ? { workflow: dedupe.workflow } : {}),
             token, target, requestId, session: { ...result.sessionContext }, locale: currentLocale(),
             generation: lifecycleGeneration, signal, ack, ...(workingDir ? { workingDir } : {}), initialPhase: 'queued',
             ...(dedupe.recipientUserId ? { recipientUserId: dedupe.recipientUserId } : {}),
@@ -1054,6 +1070,7 @@ export async function processSlackMessageEvent(
     text: string,
     signal: AbortSignal,
     opts: {
+        workflowSelection?: SlackWorkflowSelection;
         socketTeamId?: string;
         prefetchToken?: number;
         prefetchOwner?: SessionOwnerToken;
@@ -1090,6 +1107,7 @@ async function runSlackMessageEvent(
     text: string,
     signal: AbortSignal,
     opts: {
+        workflowSelection?: SlackWorkflowSelection;
         socketTeamId?: string;
         prefetchToken?: number;
         prefetchOwner?: SessionOwnerToken;
@@ -1102,6 +1120,17 @@ async function runSlackMessageEvent(
     const files = event.files || [];
     let prompt = text;
     let displayText = text;
+    const workflow = await prepareSlackWorkflow(event, gateConfig(), SKILLS_DIR, opts.workflowSelection);
+    if (signal.aborted) return;
+    if (workflow.kind === 'blocked') {
+        log.warn('[slack:workflow] blocked', { code: workflow.code, channelId: target.targetId });
+        const token = getSlackSendClient().token;
+        if (token) {
+            const sent = await sendSlackText(token, target, t('slack.workflow.unavailable', {}, currentLocale()));
+            if (sent.ok && opts.eventKey) commitSlackEvent(opts.eventKey);
+        }
+        return;
+    }
     // Start identity resolution alongside the downloads. Running them in series
     // would add a round trip to every attachment message.
     const identityPromise = resolveSenderIdentity(event, { signal });
@@ -1132,7 +1161,7 @@ async function runSlackMessageEvent(
     // (gateway.ts:234). A sender line in front of "계속" stops it being a
     // continuation, so control text travels undecorated. Reset is already
     // intercepted upstream and never reaches here.
-    if (!isContinueIntent(prompt)) {
+    if (workflow.kind === 'ready' || !isContinueIntent(prompt)) {
         const block = await buildInboundContextBlock(event, identity, signal, opts, commitPrefetch);
         // An empty block lands EXACTLY on the previous behavior: config off and
         // total lookup failure must be indistinguishable from before this
@@ -1144,6 +1173,10 @@ async function runSlackMessageEvent(
         // the message, and the conversation is already obvious in Slack's own UI.
         displayText = buildSenderDisplay(identity, displayText);
     }
+    if (workflow.kind === 'ready') {
+        prompt = renderSlackWorkflow(workflow, prompt);
+        log.info('[slack:workflow] routed', workflow.metadata);
+    }
     const sourceToken = getSlackSendClient().token;
     const workspace = sourceToken && opts.socketTeamId ? await verifiedSlackWorkspace(sourceToken).catch(() => null) : null;
     if (signal.aborted) return;
@@ -1151,6 +1184,7 @@ async function runSlackMessageEvent(
         ? { teamId: workspace.teamId, actorId: event.user, destination: target, credentialKey: slackCredentialKey(sourceToken),
             ...(typeof event.action_token === 'string' ? { actionToken: event.action_token } : {}) } : undefined;
     await slackOrchestrate(target, prompt, displayText, signal, {
+        ...(workflow.kind === 'ready' ? { workflow: workflow.metadata } : {}),
         ...(toolSource ? { toolSource } : {}),
         ...(opts.eventKey ? { eventKey: opts.eventKey } : {}),
         ...(opts.reservationGeneration !== undefined
@@ -1396,14 +1430,16 @@ export async function handleSlackEnvelope(envelope: SlackEnvelope, approvalTrans
     const event = payload?.event;
     if (!event) return;
 
-    const approval = handleApprovalCommand(approvalTransport, {
+    const receiveGate = gateConfig();
+    const workflowSelection = captureSlackWorkflow(event, receiveGate);
+    const approval = workflowSelection.kind === 'none' ? handleApprovalCommand(approvalTransport, {
         ...event,
         __jawSelf: Boolean(event.user && event.user === getSlackSelfUserId()),
-    }, String(event.text || ''));
+    }, String(event.text || '')) : { handled: false };
     if (approval.handled) return;
 
     const target = buildSlackTarget(event);
-    const decision = shouldProcessSlackEvent(event, gateConfig(), envelope.type);
+    const decision = shouldProcessSlackEvent(event, receiveGate, envelope.type);
     if (!decision.process) {
         log.info(`[slack:in] skipped (${decision.reason})`);
         return;
@@ -1495,7 +1531,7 @@ export async function handleSlackEnvelope(envelope: SlackEnvelope, approvalTrans
         if (!text && !hasFiles) return;
         if (text) log.info(`[slack:in] ${event.channel}: ${redactOutboundText(text).slice(0, 80)}`);
 
-        if (!hasFiles && isResetIntent(text)) {
+        if (!hasFiles && workflowSelection.kind === 'none' && isResetIntent(text)) {
             const client = getSlackSendClient();
             const result = submitMessage(text, { origin: 'slack', target });
             if (client.token) {
@@ -1508,6 +1544,7 @@ export async function handleSlackEnvelope(envelope: SlackEnvelope, approvalTrans
 
         prefetchHandedOff = enqueueSlackIngress(slackIngressLaneKey(target), signal =>
             processSlackMessageEvent(event, target, text, signal, {
+                workflowSelection,
                 ...(typeof envelope.payload?.['team_id'] === 'string' ? { socketTeamId: envelope.payload['team_id'] } : {}),
                 prefetchToken,
                 ...(prefetchOwner ? { prefetchOwner } : {}),
@@ -1634,7 +1671,7 @@ async function runSlackInit(ctx?: TransportInitContext): Promise<TransportStartO
     if (declaredTriggers > 0) {
         const usable = readTrustedBotTriggers(sc.trustedBotTriggers).length;
         if (usable === 0) {
-            log.warn(`[slack:triggers] ${declaredTriggers} trusted bot trigger(s) configured but the list is invalid, so none of them can start a turn — every rule needs exactly channelId (C/G), botId (B), userId (U/W) and an uppercase textMarker`);
+            log.warn(`[slack:triggers] ${declaredTriggers} trusted bot trigger(s) configured but the list is invalid, so none of them can start a turn — every rule needs channelId (C/G), botId (B), userId (U/W), an uppercase textMarker and, optionally, a valid workflowSkill ID`);
         } else {
             log.info(`[slack:triggers] ${usable} trusted bot trigger(s) active`);
         }

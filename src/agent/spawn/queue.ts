@@ -8,8 +8,10 @@ import { withSessionScope } from '../../core/session-context.js';
 import { sessionLanes, type SessionLanes } from '../../orchestrator/session-lanes.js';
 import { scopeForChatSession } from '../../orchestrator/scope.js';
 import { settleOnce } from '../../orchestrator/request-registry.js';
+import { readSlackWorkflowMetadata, type SlackWorkflowMetadata } from '../../slack/workflow.js';
 
 type QueueItem = {
+    slackWorkflow?: SlackWorkflowMetadata;
     schemaVersion?: 2;
     id: string;
     prompt: string;
@@ -28,6 +30,7 @@ type QueueItem = {
 };
 
 type QueueMessageMeta = {
+    slackWorkflow?: SlackWorkflowMetadata;
     target?: RemoteTarget;
     chatId?: string | number;
     requestId?: string;
@@ -141,6 +144,8 @@ export function createQueueController(
                 ? parsed.chatSessionId
                 : (remoteKey ? deps.resolveRemoteSession?.(remoteKey) ?? 'default' : 'default');
             const persistedScope = multiSessionEnabled && typeof parsed.scope === 'string' ? parsed.scope : 'default';
+            const slackWorkflow = parsed.source === 'slack' ? readSlackWorkflowMetadata(parsed.slackWorkflow, parsed.target) : undefined;
+            if (parsed.slackWorkflow !== undefined && !slackWorkflow) return [];
             // `localSessionScopeEnabled` governs LOCAL scopes: whether a plain chat
             // session gets a scope of its own. A remote conversation is not that, and
             // passing the local flag as the gate made an unpersisted Slack item collapse
@@ -168,6 +173,7 @@ export function createQueueController(
                 requestId: parsed.requestId,
                 overrides: parsed.overrides,
                 replyViaTarget: parsed.replyViaTarget === true,
+                ...(slackWorkflow ? { slackWorkflow } : {}),
                 ...(multiSessionEnabled && parsed.collect === true ? { collect: true } : {}),
                 ...(multiSessionEnabled && parsed.priority === 'head' ? { priority: 'head' as const } : {}),
                 ts: typeof parsed.ts === 'number' ? parsed.ts : Date.now(),
@@ -435,6 +441,7 @@ export function createQueueController(
             requestId: meta?.requestId,
             overrides: meta?.overrides,
             replyViaTarget: meta?.replyViaTarget,
+            ...(source === 'slack' && meta?.slackWorkflow ? { slackWorkflow: meta.slackWorkflow } : {}),
             ...(multiSessionEnabled && meta?.collect === true ? { collect: true } : {}),
             ...(multiSessionEnabled && meta?.front === true ? { priority: 'head' as const } : {}),
             ts: Date.now(),
@@ -578,6 +585,7 @@ export function createQueueController(
             // turns with the same duplicate to prevent.
             if (requestId) deps.broadcast('queued_run_started', stripUndefined({
                 requestId, origin, scope: item.scope, target, sessionId: effectiveSessionId,
+                slackWorkflow: item.slackWorkflow,
             }));
             deps.broadcast('queue_update', queueUpdatePayload(item.scope));
 
@@ -588,6 +596,7 @@ export function createQueueController(
                     chatSessionId: effectiveSessionId,
                     ...(item.remoteKey ? { remoteKey: item.remoteKey } : {}),
                     overrides, replyViaTarget, _skipInsert: true,
+                    slackWorkflow: item.slackWorkflow,
                     // Marks the completion so a channel can answer a turn whose
                     // original requester is gone — a boot-drained item has no
                     // listener left (#407). Ordinary turns must NOT carry this,

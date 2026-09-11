@@ -178,11 +178,11 @@ refuses anything carrying `bot_id` or `bot_profile`, and a channel message that 
 defers to its `app_mention` twin. Turning `allowBots` on to admit one scheduled trigger admits
 every bot in every allowed conversation, which is rarely what an operator wants.
 
-`slack.trustedBotTriggers` names the exception instead. Each rule is exactly four fields:
+`slack.trustedBotTriggers` names the exception instead. Each strict rule has four required fields and an optional `workflowSkill`; unknown fields are rejected:
 
 ```json
 "trustedBotTriggers": [
-  { "channelId": "C0123ABCD", "botId": "B0123ABCD", "userId": "U0123ABCD", "textMarker": "DAILY_UPLOAD_V1" }
+  { "channelId": "C123", "botId": "B123", "userId": "U123", "textMarker": "EXAMPLE_WORK_V1", "workflowSkill": "example-work" }
 ]
 ```
 
@@ -199,3 +199,22 @@ and the empty-event check still apply, so a rule cannot reach a conversation `ch
 The list validates as a whole: one malformed rule disables every rule, and at most 16 are read. A
 typo therefore fails closed instead of leaving half the list live. Copying the marker text does not
 help anyone else — Slack attests `bot_id` and `user`, so only the named app satisfies its rule.
+
+`workflowSkill` selects an operator-configured execution route only after the actual event matches
+all sender, channel, bot-user and marker checks plus a self-mention. Message text cannot select a
+different skill. Existing four-field rules without `workflowSkill` retain their legacy behavior.
+Only the selected enabled skill is loaded, with a 64 KiB read bound. Unverified sender/request
+context (`source_unavailable`), an unavailable skill (`skill_unavailable`), or ambiguous selection
+(`ambiguous`) visibly blocks the automation with `slack.workflow.unavailable`; check configuration. There is no model fallback. Normal approval, tool grants and source access
+permissions still apply.
+
+Read the selected skill at admission. Its captured content, hash and source metadata survive
+queueing and restart. When busy, opted-in workflow requests use the `followup` queue; never steer
+or collect them into an unrelated running turn.
+
+An empty result or standalone `SILENT` result from a registered workflow produces a visible
+unconfirmed notice (`slack.workflow.unconfirmed`) and a failure ACK, not silent success.
+This settles the workflow request as unconfirmed/failed while preserving provider/native final
+text and status.
+Work may already have begun: inspect its records before retrying. Do not automatically rerun it.
+A substantive AI reply alone is not proof that the requested business operation completed.

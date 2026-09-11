@@ -15,6 +15,7 @@ import {
 } from '../core/db.js';
 import { log } from '../core/logger.js';
 import { logErrorText } from '../messaging/redact.js';
+import type { SlackWorkflowMetadata } from './workflow.js';
 
 const ingressTails = new Map<string, Promise<void>>();
 const controllers = new Set<AbortController>();
@@ -225,6 +226,7 @@ export function resolveSlackScopeForTarget(target: RemoteTarget): string | null 
 }
 
 export function admitSlackRun(params: {
+    workflow?: SlackWorkflowMetadata;
     toolSource?: SlackToolSource;
     target: RemoteTarget;
     prompt: string;
@@ -245,12 +247,14 @@ export function admitSlackRun(params: {
     const result = submitMessage(params.prompt, {
         ...(params.toolSource ? { ownedExecution: true as const, onAdmitted: (binding: { requestId: string; scope: string; chatSessionId: string }) => { if (!reserveSlackToolGrant(params.toolSource!, binding)) throw new Error('slack_tool_context_unavailable'); } } : {}),
         origin: 'slack', displayText: params.displayText, skipOrchestrate: true,
+        ...(params.workflow ? { slackWorkflow: params.workflow } : {}),
         target: params.target, chatId: params.chatId,
         // A tool turn keeps the default steer policy: its grant is reserved at
         // admission (gateway onAdmitted) under the same requestId the kill-steer
         // follow-up continues with, so the follow-up spawn re-activates it.
         // Only synthetic thread addresses still force followup. (#660 review)
-        ...(params.target.threadIsSynthetic === true ? { midRunPolicy: 'followup' as const } : {}),
+        // A configured automation is its own task, not a steer into someone else's run.
+        ...(params.workflow || params.target.threadIsSynthetic === true ? { midRunPolicy: 'followup' as const } : {}),
         ...(remoteKey ? { remoteKey } : {}), chatSessionId, scope,
     });
     const session = result.sessionContext || { scope, chatSessionId, ...(remoteKey ? { remoteKey } : {}) };

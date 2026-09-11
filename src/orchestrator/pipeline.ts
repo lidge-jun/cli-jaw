@@ -5,6 +5,7 @@
 import crypto from 'crypto';
 import { resolve } from 'node:path';
 import { broadcast } from '../core/bus.js';
+import { readSlackWorkflowMetadata, isWorkflowReplyUnconfirmed } from '../slack/workflow.js';
 import { settings } from '../core/config.js';
 import {
     clearAllEmployeeSessions,
@@ -702,6 +703,8 @@ export async function orchestrate(
     // never invent an ID or attach native identity to synthetic/legacy replies.
     const nativeRunTag = nativeOutcome && typeof result['traceRunId'] === 'string' && result['traceRunId'].trim()
         ? { traceRunId: result['traceRunId'] } : {};
+    const slackWorkflow = origin === 'slack' ? readSlackWorkflowMetadata(meta['slackWorkflow'], target) : undefined;
+    const workflowUnconfirmed = Boolean(slackWorkflow && isWorkflowReplyUnconfirmed(String(compatibilityText), { ...result, ...nativeTags }));
     broadcast('orchestrate_done', {
         text: compatibilityText,
         ...nativeTags,
@@ -711,6 +714,8 @@ export async function orchestrate(
         target,
         requestId,
         replyViaTarget,
+        ...(slackWorkflow ? { slackWorkflow } : {}),
+        ...(workflowUnconfirmed ? { workflowUnconfirmed: true } : {}),
         // After target/replyViaTarget on purpose: the source-level queue-correlation
         // pin reads the payload up to the first `{}),` terminator, and the ternary
         // below contains one. Target correlation must stay inside the window.
@@ -727,7 +732,8 @@ export async function orchestrate(
         ...(typeof result['agyCheckpointSeen'] === 'boolean' ? { agyCheckpointSeen: result['agyCheckpointSeen'] } : {}),
         ...(elicitationSpecs.length > 0 ? { elicitationSpecs } : {}),
     });
-    settleOnce(requestId, 'completed', { scope, text: compatibilityText, ...nativeTags,
+    settleOnce(requestId, workflowUnconfirmed ? 'failed' : 'completed', { scope, text: compatibilityText, ...nativeTags,
+        ...(workflowUnconfirmed ? { reason: 'workflow_execution_unconfirmed' } : {}),
         ...(nativeOutcome ? { sessionId: chatSessionId } : {}) });
 }
 

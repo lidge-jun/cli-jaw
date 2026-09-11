@@ -20,6 +20,7 @@ import {
     TELEGRAM_ACK_DEFAULTS,
 } from '../messaging/ack-reaction.js';
 import { SLACK_AUTO_JOIN_DEFAULTS, mergeSlackAutoJoin } from '../slack/auto-join.js';
+import type { TrustedBotTrigger } from '../slack/events.js';
 import { SETUP_STATE_FILE } from './install-integrity.js';
 import {
     sanitizeSettingsInput,
@@ -313,7 +314,7 @@ function createDefaultSettings() {
             allowBots: false,
             // Named other bots that may start a turn here. Empty means none, and
             // the inbound gate validates every rule before trusting any of them.
-            trustedBotTriggers: [] as { channelId: string; botId: string; userId: string; textMarker: string }[],
+            trustedBotTriggers: [] as TrustedBotTrigger[],
             // Slack bots typically live in shared team channels, where
             // answering every message is antisocial. DMs bypass this gate.
             mentionOnly: true,

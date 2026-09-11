@@ -2,6 +2,8 @@
 // Pure decision + extraction helpers. No IO, so every gating rule below is
 // directly unit-testable without a socket or a workspace.
 
+import { assertSkillId } from '../security/path-guards.js';
+
 export type SlackFileEvent = {
     id?: string;
     name?: string;
@@ -98,9 +100,11 @@ export type TrustedBotTrigger = {
     botId: string;
     userId: string;
     textMarker: string;
+    workflowSkill?: string;
 };
 
 const TRUSTED_TRIGGER_KEYS = ['channelId', 'botId', 'userId', 'textMarker'] as const;
+const TRUSTED_TRIGGER_ALLOWED_KEYS = new Set<string>([...TRUSTED_TRIGGER_KEYS, 'workflowSkill']);
 const TRUSTED_TRIGGER_PATTERNS: Record<(typeof TRUSTED_TRIGGER_KEYS)[number], RegExp> = {
     channelId: /^[CG][A-Z0-9]{2,}$/,
     botId: /^B[A-Z0-9]{2,}$/,
@@ -122,16 +126,30 @@ export function readTrustedBotTriggers(value: unknown): TrustedBotTrigger[] {
     for (const raw of value) {
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
         const row = raw as Record<string, unknown>;
-        if (Object.keys(row).length !== TRUSTED_TRIGGER_KEYS.length) return [];
+        if (Reflect.ownKeys(row).some(key => typeof key !== 'string' || !TRUSTED_TRIGGER_ALLOWED_KEYS.has(key))) return [];
         for (const key of TRUSTED_TRIGGER_KEYS) {
+            if (!Object.hasOwn(row, key)) return [];
             const field = row[key];
             if (typeof field !== 'string' || !TRUSTED_TRIGGER_PATTERNS[key].test(field)) return [];
+        }
+        let workflowSkill: string | undefined;
+        if (Object.hasOwn(row, 'workflowSkill')) {
+            const field = row['workflowSkill'];
+            // assertSkillId coerces and trims; settings must already be canonical.
+            if (typeof field !== 'string') return [];
+            try {
+                if (assertSkillId(field) !== field) return [];
+            } catch {
+                return [];
+            }
+            workflowSkill = field;
         }
         rules.push({
             channelId: row['channelId'] as string,
             botId: row['botId'] as string,
             userId: row['userId'] as string,
             textMarker: row['textMarker'] as string,
+            ...(workflowSkill !== undefined ? { workflowSkill } : {}),
         });
     }
     return rules;
@@ -145,20 +163,24 @@ export function readTrustedBotTriggers(value: unknown): TrustedBotTrigger[] {
  * matches its channel, bot id, sender id and marker word. Nothing here widens
  * who may be answered — it only lets a named trigger past the bot refusals.
  */
-export function matchesTrustedBotTrigger(event: SlackMessageEvent, config: SlackGateConfig): boolean {
+export function matchingTrustedBotTriggers(event: SlackMessageEvent, config: SlackGateConfig): TrustedBotTrigger[] {
     const rules = readTrustedBotTriggers(config.trustedBotTriggers);
-    if (rules.length === 0 || !config.selfUserId) return false;
-    if (!mentionsUser(event.text || '', config.selfUserId)) return false;
+    if (rules.length === 0 || !config.selfUserId) return [];
+    if (!mentionsUser(event.text || '', config.selfUserId)) return [];
     const botId = event.bot_id || event.bot_profile?.id;
     const userId = event.user || event.bot_profile?.user_id;
-    if (!botId || !userId || userId === config.selfUserId || event.bot_profile?.deleted === true) return false;
+    if (!botId || !userId || userId === config.selfUserId || event.bot_profile?.deleted === true) return [];
     // A payload that disagrees with itself names no one, so it matches no rule.
     if ((event.bot_id && event.bot_profile?.id && event.bot_id !== event.bot_profile.id)
-        || (event.user && event.bot_profile?.user_id && event.user !== event.bot_profile.user_id)) return false;
-    // Whole words only: REELBRAIN_MEDIA_V1X must never satisfy REELBRAIN_MEDIA_V1.
+        || (event.user && event.bot_profile?.user_id && event.user !== event.bot_profile.user_id)) return [];
+    // Whole words only: EXAMPLE_READY_V1X must never satisfy EXAMPLE_READY_V1.
     const words = new Set((event.text || '').split(/\s+/));
-    return rules.some(rule => rule.channelId === event.channel
+    return rules.filter(rule => rule.channelId === event.channel
         && rule.botId === botId && rule.userId === userId && words.has(rule.textMarker));
+}
+
+export function matchesTrustedBotTrigger(event: SlackMessageEvent, config: SlackGateConfig): boolean {
+    return matchingTrustedBotTriggers(event, config).length > 0;
 }
 
 /**

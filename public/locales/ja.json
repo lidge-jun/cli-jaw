@@ -973,5 +973,7 @@
   "slack.progress.status.unconfirmed": "完了未確認",
   "slack.progress.deliveryComplete": "回答を送信しました",
   "slack.progress.deliveryFailed": "回答の送信を確認できませんでした",
-  "slack.progress.deliveryUnconfirmed": "回答の送信は未確認"
+  "slack.progress.deliveryUnconfirmed": "回答の送信は未確認",
+  "slack.workflow.unavailable": "自動化の送信元・リクエスト情報、または指定された有効なスキルを確認できなかったため、実行しませんでした。設定を確認してください。",
+  "slack.workflow.unconfirmed": "登録されたワークフローから実質的な結果が返されませんでした。作業がすでに始まっている可能性があるため、再試行する前に記録を確認してください。"
 }
