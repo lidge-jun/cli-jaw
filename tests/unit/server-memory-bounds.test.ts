@@ -103,9 +103,18 @@ test('D2: a duplicate-registration kill records a reason and escalates', async (
         source.includes('killReasons.set(prevPid, DUP_REGISTRATION_KILL_REASON)'),
         'the dup kill must record a kill reason',
     );
+    // Retargeted in #681: the six exit handlers no longer each compare the reason
+    // themselves — they delegate to isLifecycleSteerReason, which is where the
+    // dup-kill-is-a-steer invariant now lives. The invariant is unchanged; the
+    // assertion follows it to its single owner.
+    const killReasonSrc = await readFile(new URL('../../src/agent/spawn/kill-reason.ts', import.meta.url), 'utf8');
     assert.ok(
-        source.includes("killReason === DUP_REGISTRATION_KILL_REASON"),
+        killReasonSrc.includes('reason === DUP_REGISTRATION_KILL_REASON'),
         'the exit handler must treat a dup kill like a steer so it does not evict the new child',
+    );
+    assert.ok(
+        source.includes('isLifecycleSteerReason(killReason)'),
+        'the exit handlers must classify through that shared helper',
     );
     // Escalation is now handled by OwnedProcess: it walks the tree, schedules
     // a grace period, and re-checks the original child before SIGKILL — so a
