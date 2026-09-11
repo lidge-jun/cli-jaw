@@ -340,11 +340,40 @@ function naverFinanceCandidates(url: URL): CandidateUrl[] {
     if (url.hostname !== 'finance.naver.com') return [];
     const code = url.searchParams.get('code');
     if (!code || !/^[A-Z0-9]{4,12}$/i.test(code)) return [];
+    // #694: the window used to be frozen at a fixed pair of calendar dates, so
+    // every session past the hardcoded end would have been silently cut off.
+    // The endpoint is the Korean exchange, so the window is computed on the
+    // Seoul calendar, and the end runs a day ahead so no offset can truncate
+    // the newest session. Korea has no DST, so a fixed +9h shift is exact.
+    const now = Date.now();
+    const start = seoulTwoYearsBack(now);
+    const end = seoulYyyymmdd(now + 24 * 60 * 60 * 1000);
     return [{
         label: 'naver-finance-json',
-        url: `https://api.finance.naver.com/siseJson.naver?symbol=${encodeURIComponent(code)}&requestType=1&startTime=20240101&endTime=20261231&timeframe=day`,
+        url: `https://api.finance.naver.com/siseJson.naver?symbol=${encodeURIComponent(code)}&requestType=1&startTime=${start}&endTime=${end}&timeframe=day`,
         source: 'public_endpoint',
     }];
+}
+
+const SEOUL_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+/** YYYYMMDD on the Seoul calendar. */
+function seoulYyyymmdd(epochMs: number): string {
+    const shifted = new Date(epochMs + SEOUL_OFFSET_MS);
+    const month = String(shifted.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(shifted.getUTCDate()).padStart(2, '0');
+    return `${shifted.getUTCFullYear()}${month}${day}`;
+}
+
+/**
+ * Two Seoul years back. Subtracting from the year field directly would emit a
+ * 29 February in a year that has none; routing through Date.UTC rolls that to
+ * 1 March instead of producing a date that never existed.
+ */
+function seoulTwoYearsBack(epochMs: number): string {
+    const shifted = new Date(epochMs + SEOUL_OFFSET_MS);
+    const rolled = Date.UTC(shifted.getUTCFullYear() - 2, shifted.getUTCMonth(), shifted.getUTCDate());
+    return seoulYyyymmdd(rolled - SEOUL_OFFSET_MS);
 }
 
 function mediumCandidates(url: URL): CandidateUrl[] {
