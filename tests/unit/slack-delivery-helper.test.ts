@@ -3,6 +3,8 @@ import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { settings } from '../../src/core/config.ts';
 import { broadcast } from '../../src/core/bus.ts';
+import { log } from '../../src/core/logger.ts';
+import { redactChannelSecrets } from '../../src/messaging/redact.ts';
 
 // Drive the real Slack bot producers. Collection, gateway admission, ACK,
 // progress, identity and the outbound Slack transports are faked; no socket,
@@ -203,4 +205,28 @@ test('the ACK settles when the body is posted, before readback verification fini
         `ACK must settle before send resolves: ${JSON.stringify(operations)}`,
     );
     assert.ok(operations.indexOf('ack:success') < operations.indexOf('send:resolved'));
+});
+
+test('the outbound answer log masks credentials the agent echoed', async t => {
+    // #697 names src/slack/bot.ts as a hot path whose masking fixes landed
+    // without tests. This line writes AGENT OUTPUT to the log ring and the
+    // console on every delivered turn, so it is where a credential the model
+    // repeated back would actually leak - and #686 just moved it out of
+    // runReply into the shared helper's onSent hook, which is exactly when an
+    // unasserted contract quietly stops holding.
+    const secret = ['xoxb', '1234567890', '1234567890', 'abcdefghijklmnopqrstuvwx'].join('-');
+    const masked = redactChannelSecrets(secret);
+    const lines: string[] = [];
+    t.mock.method(log, 'info', (...args: unknown[]) => { lines.push(args.map(value => String(value)).join(' ')); });
+
+    // The masker runs before the 80-character truncation, so putting the
+    // credential first keeps this about masking rather than about slicing.
+    body = `${secret} is the token you asked about`;
+    await run();
+    await drain();
+
+    const outbound = lines.find(line => line.startsWith('[slack:out'));
+    assert.ok(outbound, `no outbound log line was emitted: ${JSON.stringify(lines)}`);
+    assert.ok(!outbound.includes(secret), `raw credential reached the log: ${outbound}`);
+    assert.ok(outbound.includes(masked), `masked form missing: ${outbound}`);
 });
