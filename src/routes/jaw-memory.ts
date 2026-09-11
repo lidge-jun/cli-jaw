@@ -67,7 +67,7 @@ function saveCanonicalSoul(content: string): string {
 }
 
 export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddleware): void {
-    app.get('/api/jaw-memory/search', async (req, res) => {
+    app.get('/api/jaw-memory/search', requireAuth, async (req, res) => {
         try {
             const q = String(req.query["q"] || '');
 
@@ -83,7 +83,7 @@ export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddlewar
         catch (e: unknown) { res.status(500).json({ error: (e as Error).message }); }
     });
 
-    app.get('/api/jaw-memory/read', (req, res) => {
+    app.get('/api/jaw-memory/read', requireAuth, (req, res) => {
         try {
             const file = assertMemoryRelPath(String(req.query["file"] || ''), { allowExt: ['.md', '.txt', '.json'] });
             const mem = getMemoryStatus();
@@ -107,7 +107,7 @@ export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddlewar
         } catch (e: unknown) { res.status(httpStatus(e, 500)).json({ error: (e as Error).message }); }
     });
 
-    app.get('/api/jaw-memory/context', (req, res) => {
+    app.get('/api/jaw-memory/context', requireAuth, (req, res) => {
         try {
             const file = assertMemoryRelPath(String(req.query["file"] || ''), { allowExt: ['.md', '.txt', '.json'] });
             const memDir = getAdvancedMemoryDir() || join(JAW_HOME, 'memory');
@@ -177,7 +177,7 @@ export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddlewar
         } catch (e: unknown) { res.status(httpStatus(e, 500)).json({ error: (e as Error).message }); }
     });
 
-    app.get('/api/jaw-memory/list', (_, res) => {
+    app.get('/api/jaw-memory/list', requireAuth, (_, res) => {
         try {
             const mem = getMemoryStatus();
             const files = mem.routing.searchRead === 'advanced'
@@ -234,7 +234,7 @@ export function registerJawMemoryRoutes(app: Express, requireAuth: AuthMiddlewar
         }
     });
 
-    app.get('/api/jaw-memory/soul', async (_req, res) => {
+    app.get('/api/jaw-memory/soul', requireAuth, async (_req, res) => {
         try {
             const { readSoul } = await import('../memory/identity.js');
             res.json({ soul: readSoul() });

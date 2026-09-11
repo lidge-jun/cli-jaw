@@ -15,7 +15,7 @@ import { assertMemoryRelPath, assertFilename, safeResolveUnder } from '../securi
 import { migrateLegacyClaudeValue } from '../cli/claude-models.js';
 
 export function registerMemoryRoutes(app: Express, requireAuth: AuthMiddleware): void {
-    app.get('/api/memory/status', (_req, res) => {
+    app.get('/api/memory/status', requireAuth, (_req, res) => {
         const base = getMemoryStatus();
         const lockPath = getMigrationLockPath();
         const migrationLocked = fs.existsSync(lockPath);
@@ -84,7 +84,7 @@ export function registerMemoryRoutes(app: Express, requireAuth: AuthMiddleware):
         });
     });
 
-    app.get('/api/memory/files', (_req, res) => {
+    app.get('/api/memory/files', requireAuth, (_req, res) => {
         res.json(listMemoryFiles());
     });
 
@@ -140,7 +140,7 @@ export function registerMemoryRoutes(app: Express, requireAuth: AuthMiddleware):
         }
     });
 
-    app.get('/api/memory-files/:filename', (req, res) => {
+    app.get('/api/memory-files/:filename', requireAuth, (req, res) => {
         try {
             const name = assertFilename(req.params.filename);
             const fp = safeResolveUnder(memoryModule.MEMORY_DIR, name);

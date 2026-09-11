@@ -5,8 +5,10 @@ import { join } from 'path';
 import { normalizeLocale } from '../core/i18n.js';
 import { settings } from '../core/config.js';
 
-export function registerI18nRoutes(app: Express, _requireAuth: AuthMiddleware, projectRoot: string): void {
-    app.get('/api/i18n/languages', (_, res) => {
+// The guard used to arrive here and be discarded (`_requireAuth`), so the locale
+// routes answered any caller (#684).
+export function registerI18nRoutes(app: Express, requireAuth: AuthMiddleware, projectRoot: string): void {
+    app.get('/api/i18n/languages', requireAuth, (_, res) => {
         const localeDir = join(projectRoot, 'public', 'locales');
         if (!fs.existsSync(localeDir)) {
             res.json({ languages: ['ko'], default: 'ko' });
@@ -18,7 +20,7 @@ export function registerI18nRoutes(app: Express, _requireAuth: AuthMiddleware, p
         res.json({ languages: langs, default: normalizeLocale(settings["locale"], 'ko') });
     });
 
-    app.get('/api/i18n/:lang', (req, res) => {
+    app.get('/api/i18n/:lang', requireAuth, (req, res) => {
         const raw = req.params.lang.replace(/[^a-z-]/gi, '');
         const lang = normalizeLocale(raw, '');
         if (!lang) {
