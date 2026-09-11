@@ -9,6 +9,15 @@ interface WatchdogConfig {
     absoluteMs: number;
     absoluteHardCapMs: number;
     checkIntervalMs: number;
+    /**
+     * Count raw stdout/stderr traffic as liveness.
+     *
+     * True for CLIs, whose output IS the turn. False for a JSON-RPC runtime, where
+     * stdout carries protocol chatter the host emits regardless of whether the turn
+     * is advancing — counting it would make a wedged turn look alive forever. Those
+     * runtimes drive `markProgress` from their own structured events instead.
+     */
+    observeStdio: boolean;
 }
 
 export const DEFAULT_WATCHDOG_ABSOLUTE_HARD_CAP_MS = 4 * 60 * 60_000;
@@ -19,6 +28,7 @@ const DEFAULTS: WatchdogConfig = {
     absoluteMs: 600_000,
     absoluteHardCapMs: DEFAULT_WATCHDOG_ABSOLUTE_HARD_CAP_MS,
     checkIntervalMs: 2_000,
+    observeStdio: true,
 };
 
 export interface WatchdogHandle {
@@ -76,8 +86,10 @@ export function attachWatchdog(
 
     const stdoutRef = child.stdout;
     const stderrRef = child.stderr;
-    stdoutRef?.on('data', observe);
-    stderrRef?.on('data', observe);
+    if (cfg.observeStdio) {
+        stdoutRef?.on('data', observe);
+        stderrRef?.on('data', observe);
+    }
 
     const timer = setInterval(() => {
         if (stopped) return;
@@ -123,8 +135,10 @@ export function attachWatchdog(
         stop() {
             stopped = true;
             clearInterval(timer);
-            stdoutRef?.off('data', observe);
-            stderrRef?.off('data', observe);
+            if (cfg.observeStdio) {
+                stdoutRef?.off('data', observe);
+                stderrRef?.off('data', observe);
+            }
         },
     };
 }

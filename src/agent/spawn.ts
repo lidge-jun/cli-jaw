@@ -551,8 +551,7 @@ function getActiveMainCli(scopeKey: string): string | null {
  * after the turn started — which is what a steer wants: it is deciding how long to wait
  * right now, not how long the run was configured to take when it was spawned.
  */
-function scopedAgentTimeoutCfg(scopeKey: string): Record<string, unknown> {
-    const cli = getActiveMainCli(scopeKey);
+function mergeAgentTimeoutCfg(cli: string | null): Record<string, unknown> {
     const raw = (settings as Record<string, unknown>)['agentTimeout'];
     const global = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
     const perCli = cli && global[cli] && typeof global[cli] === 'object'
@@ -561,7 +560,7 @@ function scopedAgentTimeoutCfg(scopeKey: string): Record<string, unknown> {
 }
 
 export function getSteerWaitMsForActiveAgent(scopeKey = 'default'): number {
-    const configured = scopedAgentTimeoutCfg(scopeKey)['steerWaitMs'];
+    const configured = mergeAgentTimeoutCfg(getActiveMainCli(scopeKey))['steerWaitMs'];
     return typeof configured === 'number' && configured > 0 ? configured : DEFAULT_STEER_WAIT_MS;
 }
 
@@ -1559,12 +1558,11 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     const agyLogFile = cli === 'agy'
         ? join(os.tmpdir(), `jaw-agy-${agentId || 'main'}-${Date.now()}-${crypto.randomUUID()}.log`)
         : null;
-    const rawTimeoutCfg = (settings as Record<string, unknown>)['agentTimeout'];
-    const globalTimeoutCfg = rawTimeoutCfg && typeof rawTimeoutCfg === 'object'
-        ? rawTimeoutCfg as Record<string, unknown> : {};
-    const cliTimeoutCfg = globalTimeoutCfg[cli] && typeof globalTimeoutCfg[cli] === 'object'
-        ? globalTimeoutCfg[cli] as Record<string, unknown> : {};
-    const mergedTimeoutCfg = { ...globalTimeoutCfg, ...cliTimeoutCfg };
+    // The single agentTimeout parse for this run. Claude, the print watchdog and
+    // codex-app all read THIS object; before #682 the print path reparsed the same
+    // settings a second time, so fixing a timeout knob meant finding which of two
+    // parsers a given runtime happened to use.
+    const mergedTimeoutCfg = mergeAgentTimeoutCfg(cli);
     const resolvedAgyPrintTimeoutMs = typeof mergedTimeoutCfg['absoluteHardCapMs'] === 'number'
         ? mergedTimeoutCfg['absoluteHardCapMs'] as number
         : DEFAULT_WATCHDOG_ABSOLUTE_HARD_CAP_MS;
@@ -2946,10 +2944,15 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
             if (!opts.internal) broadcast('agent_status', { running: true, agentId: agentLabel, cli, ...empTag });
 
             const processExit: { value: { code: number | null; signal: string | null } | null } = { value: null };
+            // The one documented cross-runtime exception. codex-app keeps a 300s idle
+            // bound where the shared watchdog defaults to 90s, because an appserver turn
+            // reports sparse STRUCTURED progress instead of a continuous stream and
+            // nothing here counts stdout as liveness. settings.agentTimeout deliberately
+            // does not narrow it either: a global idleMs written for print CLIs would
+            // cut the default runtime's bound by two thirds. The env overrides remain
+            // the supported knob and are mapped into the watchdog config below.
             const idleMs = configuredPositiveMs(process.env["CODEX_APP_TURN_IDLE_MS"], DEFAULT_CODEX_APP_TURN_IDLE_MS);
             const absoluteMs = configuredPositiveMs(process.env["CODEX_APP_TURN_ABS_MS"], DEFAULT_CODEX_APP_TURN_ABS_MS);
-            let idleTimer: NodeJS.Timeout;
-            let absoluteTimer: NodeJS.Timeout;
             let watchdogCancel: Promise<void> | null = null;
             let leaseCancel: Promise<void> | null = null;
             const requestLeaseCancel = (): Promise<void> => {
@@ -2981,19 +2984,31 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 }
             };
             if (mainRun) mainRun.steerTurnInBand = steerHook;
-            const watchdogTimeout = (kind: 'idle' | 'absolute') => {
+            // The same watchdog every other runtime uses. The bespoke timer pair this
+            // replaces never set `ctx.stallReason`, and that field is the ONLY trigger
+            // for the #405 truncation notice (`error-classifier.ts:149-159`). So on the
+            // DEFAULT runtime a timeout surfaced as a generic error and the #405 fix
+            // never applied to the path most turns actually take.
+            const turnWatchdog = attachWatchdog(child, agentLabel, reason => {
                 if (watchdogCancel) return;
-                console.warn(`[codex-app:turn] watchdog stall (${kind}, idleMs=${idleMs}, absoluteMs=${absoluteMs})`);
+                console.warn(`[codex-app:turn] watchdog stall (${reason}, idleMs=${idleMs}, absoluteMs=${absoluteMs})`);
+                ctx.stallReason = reason;
                 watchdogCancel = requestLeaseCancel();
-                rejectTurn(new Error(`Codex AppServer turn ${kind} watchdog timeout`));
-            };
-            const resetIdleTimer = () => {
-                clearTimeout(idleTimer);
-                idleTimer = setTimeout(() => { watchdogTimeout('idle'); }, idleMs);
-            };
-            idleTimer = setTimeout(() => { watchdogTimeout('idle'); }, idleMs);
-            absoluteTimer = setTimeout(() => { watchdogTimeout('absolute'); }, absoluteMs);
-            markCodexProgress = resetIdleTimer;
+                rejectTurn(new Error(`Codex AppServer turn watchdog timeout: ${reason}`));
+            }, {
+                // This child's stdout IS the JSON-RPC stream and readline already owns
+                // it, so counting raw traffic as liveness would keep a wedged turn
+                // looking alive forever. Progress comes from the turn adapter instead.
+                observeStdio: false,
+                // The two bespoke timers map onto the watchdog's two real gates:
+                // markProgress slides absoluteDeadline to now+absoluteMs, giving
+                // "no progress for idleMs", capped at startedAt+absoluteHardCapMs,
+                // giving "total run beyond absoluteMs". firstProgressMs bounds a turn
+                // that never reports at all.
+                firstProgressMs: idleMs, idleMs, absoluteMs: idleMs, absoluteHardCapMs: absoluteMs,
+            });
+            ctx.stallWatchdog = turnWatchdog;
+            markCodexProgress = () => { turnWatchdog.markProgress(); };
             const listener = listenCodexAppTurnAdapter(appClient, lease, laneScope, ctx, {
                 onProgress: () => { markCodexProgress(); },
                 onRawNotification: (method, params) => {
@@ -3099,8 +3114,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 if (ctx.stderrBuf.length < 4000) ctx.stderrBuf += (err as Error).message;
                 if (!lease) appClient.kill();
             } finally {
-                clearTimeout(idleTimer);
-                clearTimeout(absoluteTimer);
+                turnWatchdog.stop();
                 markCodexProgress = () => {};
                 if (watchdogCancel) await watchdogCancel;
                 if (mainRun?.cancelTurn === cancelHook) delete mainRun.cancelTurn;
@@ -3559,17 +3573,14 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
     };
 
     // ─── Subprocess stall watchdog (Phase 1: #178 OAuth2 stall recovery) ───
-    const rawAgentTimeoutCfg = (settings as Record<string, unknown>)["agentTimeout"];
-    const gCfg = rawAgentTimeoutCfg && typeof rawAgentTimeoutCfg === 'object'
-        ? rawAgentTimeoutCfg as Record<string, unknown> : {};
-    const cCfg = gCfg[cli] && typeof gCfg[cli] === 'object'
-        ? gCfg[cli] as Record<string, unknown> : {};
-    const agentTimeoutCfg = { ...gCfg, ...cCfg };
+    // Reads the same mergedTimeoutCfg the Claude branch does. This block used to
+    // reparse settings.agentTimeout on its own, so a timeout knob behaved differently
+    // depending on which parser a runtime happened to reach (#682).
     const watchdogConfig: { firstProgressMs?: number; idleMs?: number; absoluteMs?: number; absoluteHardCapMs?: number } = {};
-    if (typeof agentTimeoutCfg['firstProgressMs'] === 'number') watchdogConfig.firstProgressMs = agentTimeoutCfg['firstProgressMs'];
-    if (typeof agentTimeoutCfg['idleMs'] === 'number') watchdogConfig.idleMs = agentTimeoutCfg['idleMs'];
-    if (typeof agentTimeoutCfg['absoluteMs'] === 'number') watchdogConfig.absoluteMs = agentTimeoutCfg['absoluteMs'];
-    if (typeof agentTimeoutCfg['absoluteHardCapMs'] === 'number') watchdogConfig.absoluteHardCapMs = agentTimeoutCfg['absoluteHardCapMs'];
+    if (typeof mergedTimeoutCfg['firstProgressMs'] === 'number') watchdogConfig.firstProgressMs = mergedTimeoutCfg['firstProgressMs'];
+    if (typeof mergedTimeoutCfg['idleMs'] === 'number') watchdogConfig.idleMs = mergedTimeoutCfg['idleMs'];
+    if (typeof mergedTimeoutCfg['absoluteMs'] === 'number') watchdogConfig.absoluteMs = mergedTimeoutCfg['absoluteMs'];
+    if (typeof mergedTimeoutCfg['absoluteHardCapMs'] === 'number') watchdogConfig.absoluteHardCapMs = mergedTimeoutCfg['absoluteHardCapMs'];
     const stallWatchdog = attachWatchdog(child, agentLabel, (reason) => {
         console.log(`[jaw:watchdog] killing ${agentLabel} — ${reason}`);
         ctx.stallReason = reason;
