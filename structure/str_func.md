@@ -406,9 +406,9 @@ cli-jaw/
 │   │   ├── index.ts          ← re-export hub (35L)
 │   │   ├── adaptive-fetch/   ← Adaptive web fetch 서브모듈 (34 files; scheduler/stage-types P0 + browser pool/proxy/BM25/Camoufox/yt-dlp) ✨
 │   │   │   ├── index.ts      ← adaptive fetch orchestrator (152L)
-│   │   │   ├── safety.ts     ← URL/content safety checks (276L)
-│   │   │   ├── endpoint-resolvers.ts ← reader API endpoint resolution (364L)
-│   │   │   ├── browser-escalation.ts ← fallback to browser fetch (314L)
+│   │   │   ├── safety.ts     ← URL/content safety checks (287L)
+│   │   │   ├── endpoint-resolvers.ts ← reader API endpoint resolution (376L)
+│   │   │   ├── browser-escalation.ts ← fallback to browser fetch (330L)
 │   │   │   └── ... (14 more: fetcher, content-scorer, validators, metadata, transforms, trace, waf-profiles, browser-session, human-loop, output, browser-runtime, third-party-readers, reader-adapters, challenge-detector)
 │   │   └── web-ai/           ← Web AI 브라우저 자동화 (96 TS files; ChatGPT/Gemini/Grok + session-artifacts/capability-probe/tier-timeout/watcher-lock)
 │   ├── ide/                   ← IDE 연동 (jaw chat TUI 전용)

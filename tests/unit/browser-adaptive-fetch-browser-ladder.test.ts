@@ -8,6 +8,12 @@ import {
 } from '../../src/browser/adaptive-fetch/browser-escalation.js';
 import { runAdaptiveFetch } from '../../src/browser/adaptive-fetch/index.js';
 
+// The browser lane now clears the entry URL's resolved address before it hands
+// the page a navigation (#685). These fixtures stub the browser but not DNS, and
+// .test never resolves, so the resolver is injected to keep them hermetic rather
+// than leaving them dependent on how the runner's DNS answers.
+const publicResolveHost = async () => [{ address: '93.184.216.34', family: 4 }];
+
 test('browser metadata collector preserves rendered DOM metadata and JSON-LD as candidate evidence', () => {
     const candidate = collectBrowserMetadataFromHtml(`
         <html><head>
@@ -31,6 +37,7 @@ test('browser escalation returns metadata and structured table/list candidates',
         browserDeps: {
             createIsolatedPage: async () => ({ page, cleanup: async () => undefined, isolated: true }),
         },
+        resolveHost: publicResolveHost,
     });
 
     assert.equal(result['label'], 'browser-render');
@@ -52,6 +59,7 @@ test('adaptive fetch scores browser metadata and structured candidates when dire
         trace: true,
     }, {
         createIsolatedPage: async () => ({ page, cleanup: async () => undefined, isolated: true }),
+        resolveHost: publicResolveHost,
     });
 
     const attempts = result['attempts'] as Record<string, unknown>[];
