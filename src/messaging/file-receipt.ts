@@ -44,6 +44,10 @@ export const FILE_UNCONFIRMED_STATUS = 502;
  * posted; an unconfirmed send may already be on screen, so posting the same
  * caption again is the more visible harm.
  */
-export function isUnconfirmedSend(result: { confirmation?: unknown } | null | undefined): boolean {
-    return result?.confirmation === 'unconfirmed';
+export function isUnconfirmedSend(result: unknown): boolean {
+    // `unknown` rather than a shape: every field on a transport result is
+    // optional, so a structural parameter type triggers TypeScript's weak-type
+    // check and rejects the very results this is meant to read.
+    return !!result && typeof result === 'object'
+        && (result as { confirmation?: unknown }).confirmation === 'unconfirmed';
 }

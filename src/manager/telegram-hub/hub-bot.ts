@@ -15,6 +15,7 @@ import { downloadTelegramFile, buildMediaPrompt, TELEGRAM_DOWNLOAD_LIMITS } from
 import { saveUpload } from '../../agent/spawn.js';
 import { redactOutboundPayload, redactOutboundText, logErrorText, userErrorText } from '../../messaging/redact.js';
 import { sendWithRetryPolicy } from '../../messaging/retry.js';
+import type { FileConfirmation } from '../../messaging/file-receipt.js';
 import { internalFetch } from '../internal-fetch.js';
 
 let hubBot: Bot | null = null;
@@ -481,7 +482,12 @@ export async function sendToTopic(
     chatId: string,
     threadId: string,
     payload: { type: string; text?: string; filePath?: string; caption?: string; reply_markup?: unknown },
-): Promise<{ ok: boolean; error?: string; bodyDelivered?: boolean }> {
+): Promise<{
+    ok: boolean; error?: string; bodyDelivered?: boolean;
+    /** File sends only. Forwarded so the member instance can tell an
+     *  unconfirmed upload from a refusal (#700). */
+    confirmation?: FileConfirmation;
+}> {
     stopTopicTyping(chatId, threadId);
     if (!hubBot) return { ok: false, error: 'hub bot not running' };
     const message_thread_id = Number(threadId) > 1 ? Number(threadId) : undefined;
