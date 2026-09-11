@@ -681,21 +681,38 @@ type AbortWait = {
 };
 
 /**
- * Cap for the persistent RPC session's stderr accumulator, matching the 4000
- * used by every sibling handler in this file. The persistent session is the
- * one that needed it most: it outlives a single run.
+ * Cap for an RPC session's stderr accumulator. The persistent session is the one
+ * that needed it most — it outlives a single run — but both readers share the
+ * constant so the two cannot silently drift apart again (#701).
  */
-const PI_PERSISTENT_STDERR_MAX_CHARS = 4000;
+const PI_RPC_STDERR_MAX_CHARS = 4000;
 
-export function spawnPersistentPiRpc(profile: PiProfile, pi: PiSettings, options: {
+/**
+ * The one owner of Pi RPC child creation.
+ *
+ * `spawnPersistentPiRpc` and `spawnPiRpc` used to carry byte-identical copies of
+ * this block, so every abort, capability and cleanup fix had to be applied twice
+ * and in practice landed on one path only (#701). What actually differs between a
+ * pooled session and a one-shot execution is the turn API layered on top — a
+ * long-lived prompt loop versus a single dispatched prompt — not how the child is
+ * launched, owned, or paired with its capability probe.
+ *
+ * The version probe is returned as a thunk rather than started here, on purpose.
+ * Both callers must still start it at their own current point, after their stream
+ * and lifecycle handlers are attached and before `owner.seal()`, so the relative
+ * order of the two children is exactly what it was. For the same reason this
+ * function is synchronous: a spawn failure reports through `error` on a later
+ * tick, which a caller attaching handlers in the same turn cannot miss.
+ */
+function launchPiRpcExecution(profile: PiProfile, pi: PiSettings, options: {
     model: string;
     effort?: string;
     cwd: string;
     sessionId?: string;
     root?: string;
-}): PiRpcSession {
+}) {
     const dir = ensurePiRuntimeConfig(pi, profile.id, options.effort || '', options.root);
-    const inherited = { ...process.env }, cwd = options.cwd, profileId = profile.id, initialEffort = options.effort;
+    const inherited = { ...process.env }, cwd = options.cwd;
     const cmd = resolvePiCommand(inherited);
     const args = [
         ...cmd.baseArgs,
@@ -720,10 +737,71 @@ export function spawnPersistentPiRpc(profile: PiProfile, pi: PiSettings, options
         ...(launch.useShell ? { shell: true } : {}),
     });
     owner.track('rpc', child);
+    return { cmd, child, owner,
+        startVersionProbe: () => startPiVersionProbe(versionLaunch, cwd, versionEnv, owner, identityCurrent) };
+}
+
+/**
+ * Shared NDJSON reader for an RPC child's stdout.
+ *
+ * `flush` is the close-time tail: it drains the decoder and hands over a final
+ * partial line. It deliberately carries no receipt check, because both callers'
+ * `dispatch` already refuses an unconfirmed child, and it must stay on `close`
+ * rather than `exit` so the caller's own settlement still runs after it.
+ */
+function readPiRpcLines(child: ChildProcess, dispatch: (line: string) => void): { flush: () => void } {
     const decoder = new StringDecoder('utf8');
     let buffer = '';
-    let stderr = '';
+    child.stdout?.on('data', (chunk) => {
+        buffer += decoder.write(chunk);
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+        const clamped = clampPendingLine(buffer);
+        if (clamped.overflowed) {
+            console.warn('[jaw:pi] stdout line exceeded the pending-line cap without a newline — truncating');
+            buffer = clamped.buffer;
+        }
+        for (const line of lines) if (line.trim()) dispatch(line.trim());
+    });
+    return {
+        flush: () => {
+            buffer += decoder.end();
+            if (buffer.trim()) dispatch(buffer.trim());
+            buffer = '';
+        },
+    };
+}
+
+/**
+ * Shared RPC frame encoder: request id, JSON body, newline.
+ *
+ * Each caller keeps its OWN liveness guard and refusal message. A pooled session
+ * and a one-shot execution genuinely disagree about what "writable" means — the
+ * session consults its own closing/poisoned state, the execution consults
+ * `doneSettled` and `signalCode` — and collapsing those two predicates into one
+ * would quietly change when a prompt is refused. Only the encoding is shared, and
+ * `seq` stays per writer.
+ */
+function createPiFrameWriter(child: ChildProcess, writable: () => boolean, refusal: string) {
     let seq = 1;
+    return (type: string, fields: Record<string, unknown> = {}): number => {
+        if (!writable()) throw new Error(refusal);
+        const id = seq++;
+        child.stdin!.write(`${JSON.stringify({ id, type, ...fields })}\n`);
+        return id;
+    };
+}
+
+export function spawnPersistentPiRpc(profile: PiProfile, pi: PiSettings, options: {
+    model: string;
+    effort?: string;
+    cwd: string;
+    sessionId?: string;
+    root?: string;
+}): PiRpcSession {
+    const profileId = profile.id, initialEffort = options.effort;
+    const { cmd, child, owner, startVersionProbe } = launchPiRpcExecution(profile, pi, options);
+    let stderr = '';
     const stderrReader = createTextStreamReader();
     let activePrompt: PersistentPrompt | null = null;
     let abortWait: AbortWait | null = null;
@@ -734,12 +812,8 @@ export function spawnPersistentPiRpc(profile: PiProfile, pi: PiSettings, options
     let closePromise: Promise<void> | undefined;
     let failureClaim: { error: Error; stopped: boolean } | undefined;
 
-    const write = (type: string, fields: Record<string, unknown> = {}): number => {
-        if (!session.alive || !child.stdin.writable) throw new Error('pi rpc session is not writable');
-        const id = seq++;
-        child.stdin.write(`${JSON.stringify({ id, type, ...fields })}\n`);
-        return id;
-    };
+    const write = createPiFrameWriter(child,
+        () => session.alive && child.stdin.writable, 'pi rpc session is not writable');
     const settleAbort = (): void => {
         if (!abortWait || !abortWait.accepted || !abortWait.terminal) return;
         const wait = abortWait;
@@ -916,23 +990,13 @@ export function spawnPersistentPiRpc(profile: PiProfile, pi: PiSettings, options
         kill() { void closeSession(true).catch(() => {}); },
     };
 
-    child.stdout?.on('data', (chunk) => {
-        buffer += decoder.write(chunk);
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-        const clamped = clampPendingLine(buffer);
-        if (clamped.overflowed) {
-            console.warn('[jaw:pi] stdout line exceeded the pending-line cap without a newline — truncating');
-            buffer = clamped.buffer;
-        }
-        for (const line of lines) if (line.trim()) dispatchLine(line.trim());
-    });
+    const stdoutLines = readPiRpcLines(child, dispatchLine);
     child.stderr?.on('data', (chunk) => {
         // Persistent RPC sessions live for the pool's idle window (15 min) and
         // longer under load, so an uncapped accumulator grows for the whole
         // session lifetime. Every sibling handler in this file caps at 4000.
-        // Second reader, never the stdout decoder above (#382, rule 1).
-        if (stderr.length < PI_PERSISTENT_STDERR_MAX_CHARS) stderr += stderrReader.write(chunk);
+        // Its own reader, never the shared stdout decoder (#382, rule 1).
+        if (stderr.length < PI_RPC_STDERR_MAX_CHARS) stderr += stderrReader.write(chunk);
     });
     child.on('error', (error) => failSession(error));
     child.stdin?.on('error', error => failSession(error));
@@ -947,11 +1011,13 @@ export function spawnPersistentPiRpc(profile: PiProfile, pi: PiSettings, options
     });
     child.on('close', (code) => {
         closed = true;
-        buffer += decoder.end();
-        if (buffer.trim() && owner.receipt?.rpc !== 'unconfirmed') dispatchLine(buffer.trim());
+        // dispatchLine itself refuses an unconfirmed child, so the tail needs no
+        // second receipt check here. failSession must stay AFTER the flush: it
+        // poisons the session, and dispatchLine drops anything once poisoned.
+        stdoutLines.flush();
         failSession(new Error(`pi rpc session exited with code ${String(code)}`));
     });
-    version = startPiVersionProbe(versionLaunch, cwd, versionEnv, owner, identityCurrent);
+    version = startVersionProbe();
     prepared = version.done.then(observation => {
         if (!session.alive) throw new Error('pi rpc session closed during preparation');
         settledProtocol = observation.status === 0 && piSupportsSettled(observation.stdout);
@@ -977,44 +1043,17 @@ export function spawnPiRpc(profile: PiProfile, pi: PiSettings, options: {
     root?: string;
 }): { child: ChildProcess; done: Promise<PiPromptResult & { code: number; sessionId?: string | null }>;
     cleanup: Promise<PiExecutionCleanupReceipt> } {
-    const dir = ensurePiRuntimeConfig(pi, profile.id, options.effort || '', options.root);
-    const inherited = { ...process.env }, cwd = options.cwd, effort = options.effort;
+    const effort = options.effort;
     const onEvent = options.onEvent, onRawRecord = options.onRawRecord;
     const fullPrompt = options.sysPrompt ? `${options.sysPrompt}\n\n${options.prompt}` : options.prompt;
     const hasHistory = fullPrompt.includes('[Recent Context]');
-    const cmd = resolvePiCommand(inherited);
-    const args = [
-        ...cmd.baseArgs,
-        '--mode', 'rpc',
-        '--no-context-files',
-        '--tools', 'read,bash,edit,write,grep,find,ls',
-        '--provider', profile.id,
-        '--model', options.model || profile.model,
-        '--api-key', profile.apiKey || 'dummy',
-        ...(options.sessionId ? ['--session-id', options.sessionId] : []),
-    ];
-    const launch = resolvePiSpawn(cmd.command, args);
-    const versionLaunch = resolvePiSpawn(cmd.command, [...cmd.baseArgs, '--version']);
-    const identityCurrent = capturePiLaunchIdentity(cmd, launch);
-    const rpcEnv = mergeEnvWindowsSafe({ ...inherited, PI_CODING_AGENT_DIR: dir }, launch.envDelta);
-    const versionEnv = mergeEnvWindowsSafe({ ...inherited, PI_CODING_AGENT_DIR: dir }, versionLaunch.envDelta);
-    const owner = createPiExecutionCleanup();
-    const child = spawn(launch.command, launch.args, {
-        cwd,
-        env: rpcEnv,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        ...(launch.useShell ? { shell: true } : {}),
-    });
-    owner.track('rpc', child);
-    const decoder = new StringDecoder('utf8');
-    let buffer = '';
+    const { child, owner, startVersionProbe } = launchPiRpcExecution(profile, pi, options);
     let stderr = '';
     const stderrReader = createTextStreamReader();
     let sessionId: string | null = null;
     let doneSettled = false, promptDispatched = false;
     let turn: PiTurnAccumulator | null = null;
     let version: ReturnType<typeof startPiVersionProbe> | undefined;
-    let seq = 1;
     let promptId = 0;
     let finish!: (code?: number, status?: RuntimeTurnOutcome['status'], error?: Error) => void;
     const done = new Promise<PiPromptResult & { code: number; sessionId?: string | null }>((resolve, reject) => {
@@ -1065,30 +1104,22 @@ export function spawnPiRpc(profile: PiProfile, pi: PiSettings, options: {
             version?.cancel();
             void owner.teardown().then(() => finish(code ?? 1, signal || child.killed ? 'stopped' : 'error'));
         });
-        child.stdout?.on('data', (chunk) => {
-            buffer += decoder.write(chunk);
-            const lines = buffer.split('\n');
-            buffer = lines.pop() ?? '';
-            const clamped = clampPendingLine(buffer);
-            if (clamped.overflowed) {
-                console.warn('[jaw:pi] stdout line exceeded the pending-line cap without a newline — truncating');
-                buffer = clamped.buffer;
-            }
-            for (const line of lines) if (line.trim()) dispatchLine(line.trim());
+        const stdoutLines = readPiRpcLines(child, dispatchLine);
+        child.stderr?.on('data', (chunk) => {
+            if (stderr.length < PI_RPC_STDERR_MAX_CHARS) stderr += stderrReader.write(chunk);
         });
-        child.stderr?.on('data', (chunk) => { if (stderr.length < 4000) stderr += stderrReader.write(chunk); });
         child.on('close', (code, signal) => {
-            if (buffer.trim()) dispatchLine(buffer.trim());
+            // The shared reader also drains the decoder here, which this path did not
+            // do before: a partial UTF-8 sequence at EOF now surfaces as U+FFFD rather
+            // than vanishing. finish() stays after the flush so a trailing terminal
+            // record can still settle the turn as complete.
+            stdoutLines.flush();
             finish(code ?? 1, signal || child.killed ? 'stopped' : 'error');
         });
     });
-    const write = (type: string, fields: Record<string, unknown> = {}) => {
-        if (doneSettled || child.exitCode !== null || child.signalCode !== null || child.killed || !child.stdin?.writable)
-            throw new Error('pi rpc execution is not writable');
-        const id = seq++;
-        child.stdin.write(JSON.stringify({ id, type, ...fields }) + '\n');
-        return id;
-    };
+    const write = createPiFrameWriter(child, () => !doneSettled && child.exitCode === null
+        && child.signalCode === null && !child.killed && Boolean(child.stdin?.writable),
+        'pi rpc execution is not writable');
     const originalKill = child.kill.bind(child);
     child.kill = (signal?: NodeJS.Signals | number): boolean => {
         const stopSignal = signal === undefined || signal === 15 ? 'SIGTERM'
@@ -1100,7 +1131,7 @@ export function spawnPiRpc(profile: PiProfile, pi: PiSettings, options: {
         return sent;
     };
     Object.defineProperty(child, PI_EXECUTION_CANCEL, { value: () => { child.kill('SIGTERM'); } });
-    version = startPiVersionProbe(versionLaunch, cwd, versionEnv, owner, identityCurrent);
+    version = startVersionProbe();
     void version.done.then(observation => {
         if (doneSettled) return;
         if (child.killed || child.exitCode !== null || child.signalCode !== null) {
