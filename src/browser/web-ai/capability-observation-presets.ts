@@ -1,4 +1,5 @@
 import type { FrontendCapabilityObservation } from './capability-types.js';
+import { chatGptModelSelectorTestIds } from './chatgpt-model.js';
 
 export const CHATGPT_MODEL_SELECTOR_OBSERVATION: FrontendCapabilityObservation = {
     status: 'implemented',
@@ -6,15 +7,11 @@ export const CHATGPT_MODEL_SELECTOR_OBSERVATION: FrontendCapabilityObservation =
     selectorCandidates: [
         '[data-testid="model-switcher-dropdown-button"]',
         'button.__composer-pill[aria-haspopup="menu"]',
-        '[data-testid="model-switcher-gpt-5-3"]',
-        '[data-testid="model-switcher-gpt-5-5-thinking"]',
-        '[data-testid="model-switcher-gpt-5-5-pro"]',
-        '[data-testid="model-switcher-gpt-5-5-thinking-thinking-effort"]',
-        '[data-testid="model-switcher-gpt-5-5-pro-thinking-effort"]',
-        '[data-testid="model-switcher-gpt-5-6-thinking"]',
-        '[data-testid="model-switcher-gpt-5-6-pro"]',
-        '[data-testid="model-switcher-gpt-5-6-thinking-thinking-effort"]',
-        '[data-testid="model-switcher-gpt-5-6-pro-thinking-effort"]',
+        // Derived from the runtime tables rather than appended by hand once per
+        // generation. The hand-maintained list had already fallen behind: it was
+        // missing the gpt-5-6 base id and the gpt-5-5 instant id that
+        // CHATGPT_MODEL_OPTIONS has been driving.
+        ...chatGptModelSelectorTestIds().map(testId => `[data-testid="${testId}"]`),
     ],
     textCandidates: ['Latest', 'Instant', 'Fast', 'Thinking', 'Thinking • Heavy', 'Pro', 'Heavy', 'Effort', 'Configure...'],
     activationPath: ['open model switcher or composer model pill', 'select menuitemradio or model-switcher effort menuitem', 'verify aria-checked=true or active pill text'],

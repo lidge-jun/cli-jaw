@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isGrokUrl } from '../../src/browser/web-ai/grok-live.ts';
-import { normalizeGrokModelChoice } from '../../src/browser/web-ai/grok-model.ts';
+import { grokModelMenuLabelPattern, normalizeGrokModelChoice } from '../../src/browser/web-ai/grok-model.ts';
 
 const root = process.cwd();
 const grokLiveSrc = readFileSync(join(root, 'src/browser/web-ai/grok-live.ts'), 'utf8');
@@ -42,7 +42,9 @@ test('BWAG-004: Grok supports opt-in copy markdown fallback', () => {
 
 test('BWAG-005: Grok supports observed model picker choices', () => {
     assert.match(grokModelSrc, /button\[aria-label="Model select"\]/);
-    for (const label of ['auto', 'fast', 'expert', 'grok-4.3', 'heavy']) {
+    // grok-4.6 shipped with the runtime but was never required here, and 'build'
+    // was observed live on 2026-09-11 in a menu that had no Grok 4.x row at all.
+    for (const label of ['auto', 'fast', 'expert', 'build', 'grok-4.3', 'grok-4.6', 'heavy']) {
         assert.match(grokModelSrc, new RegExp(label.replace('.', '\\.')));
     }
     assert.match(grokLiveSrc, /selectGrokModel/);
@@ -92,11 +94,22 @@ test('BWAG-010: whitespace collapse is general, and unknown input stays null', (
 });
 
 test('BWAG-011: the menu-open probe accepts any Grok 4.x, not one pinned release', () => {
-    // A version pinned into the probe regex means the day the web UI ships a different
-    // Grok 4.x, an open menu stops being recognized as open.
-    const probes = grokModelSrc.match(/\^Grok 4\\\.[^|/]*/g) || [];
-    assert.ok(probes.length >= 3, `expected the version probes to be present, found ${probes.length}`);
-    for (const probe of probes) {
-        assert.ok(probe.includes('\\d'), `probe is pinned to one release: ${probe}`);
+    // This used to count '^Grok 4\.' occurrences in the source, which meant the
+    // four probes had to stay written out inline. They are now derived from the
+    // labels, so the behavior is asserted instead: the probe recognises an open
+    // menu for a version it has never been told about, and no major or minor is
+    // baked into it.
+    const pattern = grokModelMenuLabelPattern();
+    for (const label of ['Auto', 'Fast', 'Expert', 'Build', 'Heavy', 'Grok 4.3', 'Grok 4.6', 'Grok 4.7', 'Grok 5.0']) {
+        assert.ok(pattern.test(label), `${label} should read as an open model menu`);
     }
+    assert.equal(pattern.test('Settings'), false);
+    assert.equal(/Grok 4\\./.test(String(pattern)), false, 'the probe must not pin a major or minor version');
+    // Check the code rather than the prose: an earlier version of this asserted
+    // the pinned spelling was absent from the whole file and tripped on the
+    // comment that explains why it was removed.
+    const inlineHasText = grokModelSrc.match(/hasText:\s*\/[^/]*\//g) || [];
+    assert.equal(inlineHasText.length, 0, `menu probes should use the derived pattern, found ${inlineHasText.join(', ')}`);
+    const derivedUses = grokModelSrc.match(/hasText:\s*GROK_MENU_LABEL_PATTERN/g) || [];
+    assert.ok(derivedUses.length >= 4, `expected every probe to use the derived pattern, found ${derivedUses.length}`);
 });

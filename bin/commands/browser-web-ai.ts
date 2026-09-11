@@ -1,6 +1,9 @@
 import { parseArgs } from 'node:util';
 import { renderContextDryRunReport } from '../../src/browser/web-ai/context-pack/index.js';
 import type { ContextDryRunMode, ContextPackResult } from '../../src/browser/web-ai/context-pack/index.js';
+import { CHATGPT_MODEL_ALIAS_KEYS, normalizeChatGptModelChoice } from '../../src/browser/web-ai/chatgpt-model.js';
+import { GEMINI_DEEP_THINK_ALIAS_KEYS, GEMINI_MODEL_ALIAS_KEYS } from '../../src/browser/web-ai/gemini-model.js';
+import { GROK_MODEL_ALIAS_KEYS } from '../../src/browser/web-ai/grok-model.js';
 
 type BrowserApi = (method: string, path: string, body?: unknown) => Promise<unknown>;
 type QueryString = (params: Record<string, unknown>) => string;
@@ -38,9 +41,14 @@ Commands:
 
 Provider:
   --vendor <name>     chatgpt | gemini | grok (default: chatgpt)
-  --model <alias>     ChatGPT: instant, thinking, pro
-                      Gemini:  flash-lite, flash, pro, deepthink
-                      Grok:    auto, fast, expert, thinking, heavy
+  --model <alias>     ChatGPT: instant, thinking, pro. Generation spellings are
+                      accepted too and follow the model switcher, currently
+                      gpt-5.6, gpt-5.6-thinking, gpt-5.6-pro and the gpt-5.5 and
+                      gpt-5.3 equivalents.
+                      Gemini:  flash-lite, flash, pro, deepthink. A versioned
+                      label such as "3.1 Pro" is accepted.
+                      Grok:    auto, fast, expert, build, heavy, thinking,
+                      grok-4.6, grok-4.3
   --effort <alias>    ChatGPT reasoning effort. Requires --model because
                       ChatGPT may expose either legacy effort menus or the
                       simplified Intelligence picker.
@@ -205,24 +213,35 @@ function rejectFutureWebAiFlags(values: Record<string, unknown>): void {
     if (effort && !isSupportedWebAiEffort(vendor, values["model"], effort)) throw new Error(`unsupported ${webAiVendorLabel(vendor)} reasoning effort: ${effort}`);
 }
 
-function isSupportedWebAiModel(vendor: unknown, model: unknown): boolean {
+export function isSupportedWebAiModel(vendor: unknown, model: unknown): boolean {
     const key = String(model || '').trim().toLowerCase();
+    // Keep this ahead of the sets. Gemini's runtime normalizer accepts a
+    // version-prefixed label ("3.1 Pro") through normalizeGeminiModelLabel,
+    // which no alias key can enumerate, so dropping it would make the CLI
+    // refuse an input the runtime handles -- the exact drift this closes.
     if (String(vendor || 'chatgpt') === 'gemini' && /^(?:gemini\s+)?(?:\d+(?:\.\d+)?\s+)?(?:flash[-_\s]?lite|flash|pro)$/.test(key)) return true;
+    // The members come from the vendor modules rather than being retyped here.
+    // As three hand-copied lists they drifted in both directions: 'grok-4.6'
+    // worked in the runtime but died at this check, and no gpt-5-6 spelling
+    // reached the runtime at all.
     const byVendor: Record<string, Set<string>> = {
-        chatgpt: new Set(['instant', 'fast', 'gpt-5-3', 'gpt-5.3', 'thinking', 'think', 'gpt-5-5-thinking', 'gpt-5.5-thinking', 'pro', 'gpt-5-5-pro', 'gpt-5.5-pro']),
-        gemini: new Set(['fast', 'flash-lite', 'flash_lite', 'flash lite', 'gemini-fast', 'gemini-flash-lite', 'gemini-flash_lite', 'gemini flash lite', 'flash', 'gemini-flash', 'thinking', 'think', 'gemini-thinking', 'pro', 'gemini-pro', 'deepthink', 'deep-think', 'deep_think', 'deep think', 'gemini-deepthink', 'gemini-deep-think']),
-        grok: new Set(['auto', 'automatic', 'fast', 'quick', 'expert', 'thinking', 'think', 'grok-4.3', 'grok43', 'grok-43', 'beta', 'heavy']),
+        chatgpt: new Set(CHATGPT_MODEL_ALIAS_KEYS),
+        // Deep Think is a Tools capability rather than a model choice, so its
+        // spellings are not in the model alias table and stay listed here.
+        gemini: new Set([...GEMINI_MODEL_ALIAS_KEYS, ...GEMINI_DEEP_THINK_ALIAS_KEYS, 'deepthink', 'deep-think', 'deep_think', 'deep think']),
+        grok: new Set(GROK_MODEL_ALIAS_KEYS),
     };
     return Boolean(byVendor[String(vendor || 'chatgpt')]?.has(key));
 }
 
-function isSupportedWebAiEffort(vendor: unknown, model: unknown, effort: unknown): boolean {
+export function isSupportedWebAiEffort(vendor: unknown, model: unknown, effort: unknown): boolean {
     if (String(vendor || 'chatgpt') !== 'chatgpt') return false;
     const effortKey = String(effort || '').trim().toLowerCase();
     const normalizedEffort = ({ low: 'light', light: 'light', standard: 'standard', normal: 'standard', regular: 'standard', default: 'standard', high: 'extended', extended: 'extended', heavy: 'heavy' } as Record<string, string>)[effortKey];
     if (!normalizedEffort) return false;
-    const modelKey = String(model || '').trim().toLowerCase();
-    const normalizedModel = ({ think: 'thinking', thinking: 'thinking', 'gpt-5-5-thinking': 'thinking', 'gpt-5.5-thinking': 'thinking', pro: 'pro', 'gpt-5-5-pro': 'pro', 'gpt-5.5-pro': 'pro' } as Record<string, string>)[modelKey];
+    // A second copy of the model table lived here, so --effort died on any
+    // spelling the copy had not been updated with even once --model accepted it.
+    const normalizedModel = normalizeChatGptModelChoice(String(model || ''));
     if (normalizedModel === 'thinking') return ['light', 'standard', 'extended', 'heavy'].includes(normalizedEffort);
     if (normalizedModel === 'pro') return ['standard', 'extended'].includes(normalizedEffort);
     return false;

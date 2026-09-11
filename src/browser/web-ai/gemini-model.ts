@@ -14,6 +14,12 @@ const GEMINI_MODE_MENU_BUTTONS = [
     'button[data-test-id="bard-mode-menu-button"]',
     'button[aria-label="Open mode picker"]',
     'button[aria-label*="mode picker" i]',
+    // Observed live on 2026-09-11: the English aria-label does not exist on a
+    // ko-KR account, where the opener reads
+    // "모드 선택 도구 열기, 현재 Flash 모드 사용 중". The test-id still resolved,
+    // but the English-only fallbacks were dead weight in that locale.
+    'button[aria-label*="모드 선택" i]',
+    'button[aria-label*="모드" i][aria-haspopup]',
 ] as const;
 
 const GEMINI_MODE_OPTION_SELECTOR = '[data-test-id^="bard-mode-option-"], [role="menuitem"], [role="option"]';
@@ -56,6 +62,24 @@ export function normalizeGeminiModelChoice(model: string | undefined): GeminiMod
     if (!key) return null;
     return GEMINI_MODEL_ALIASES[key] || normalizeGeminiModelLabel(key);
 }
+
+export const GEMINI_MODEL_ALIAS_KEYS: readonly string[] = Object.freeze(Object.keys(GEMINI_MODEL_ALIASES));
+
+export const GEMINI_DEEP_THINK_ALIAS_KEYS: readonly string[] = Object.freeze([...GEMINI_DEEP_THINK_ALIASES]);
+
+export function geminiModeLabels(choice: GeminiModelChoice): readonly string[] {
+    return GEMINI_MODE_OPTIONS[choice].labels;
+}
+
+/**
+ * The semantic ids kept as a first attempt. Observed live on 2026-09-11 the rows
+ * carry opaque hashes instead (bard-mode-option-fbb127bbb056c959 and friends),
+ * so the label match under the [data-test-id^="bard-mode-option-"] prefix is
+ * what actually resolves; these remain because an account may still serve them.
+ */
+export const GEMINI_MODE_OPTION_TEST_IDS: readonly string[] = Object.freeze(
+    (Object.values(GEMINI_MODE_OPTIONS) as { testId: string }[]).map(option => option.testId),
+);
 
 export function isGeminiDeepThinkChoice(model: string | undefined): boolean {
     const key = String(model || '').trim().toLowerCase();

@@ -1,7 +1,7 @@
 import type { Page } from 'playwright-core';
 import type { CapabilityProbeResult } from './capability-probe.js';
 
-export type GrokModelChoice = 'auto' | 'fast' | 'expert' | 'grok-4.3' | 'grok-4.6' | 'heavy';
+export type GrokModelChoice = 'auto' | 'fast' | 'expert' | 'build' | 'grok-4.3' | 'grok-4.6' | 'heavy';
 
 export interface GrokModelSelectionResult {
     requested: GrokModelChoice;
@@ -19,28 +19,80 @@ const GROK_MODEL_OPTIONS: Record<GrokModelChoice, { labels: string[] }> = {
     auto: { labels: ['Auto'] },
     fast: { labels: ['Fast'] },
     expert: { labels: ['Expert'] },
+    // Observed live on 2026-09-11: the menu read Auto / Fast / Expert / Build /
+    // Heavy, with no Grok 4.x row at all on that account. The version choices
+    // stay because they reappear per account, and Build was simply unreachable.
+    build: { labels: ['Build'] },
     'grok-4.3': { labels: ['Grok 4.3'] },
     'grok-4.6': { labels: ['Grok 4.6'] },
     heavy: { labels: ['Heavy'] },
 };
 
-const GROK_MODEL_ALIASES: Record<string, GrokModelChoice> = {
-    auto: 'auto',
+/** Aliases that are not derivable from a menu label. */
+const GROK_MODEL_ALIAS_SEEDS: Record<string, GrokModelChoice> = {
     automatic: 'auto',
-    fast: 'fast',
     quick: 'fast',
-    expert: 'expert',
     thinking: 'expert',
     think: 'expert',
-    'grok-4.3': 'grok-4.3',
-    'grok43': 'grok-4.3',
-    'grok-43': 'grok-4.3',
     beta: 'grok-4.3',
-    'grok-4.6': 'grok-4.6',
-    'grok46': 'grok-4.6',
-    'grok-46': 'grok-4.6',
-    heavy: 'heavy',
 };
+
+/**
+ * Aliases come from the labels rather than a parallel hand-written table, which
+ * is what let 'grok-4.6' exist here while the CLI still rejected it. 'Grok 4.6'
+ * yields grok-4.6, grok46 and grok-46 on its own, so a new release only needs a
+ * label.
+ */
+function deriveGrokModelAliases(): Record<string, GrokModelChoice> {
+    const aliases: Record<string, GrokModelChoice> = {};
+    for (const [choice, { labels }] of Object.entries(GROK_MODEL_OPTIONS) as [GrokModelChoice, { labels: string[] }][]) {
+        const keys = new Set<string>([choice]);
+        for (const label of labels) {
+            const lower = label.toLowerCase();
+            keys.add(lower);
+            keys.add(lower.replace(/\s+/g, '-'));
+            keys.add(lower.replace(/[\s.]+/g, ''));
+            keys.add(lower.replace(/\s+/g, '-').replace(/\./g, ''));
+        }
+        for (const key of keys) if (key && !(key in aliases)) aliases[key] = choice;
+    }
+    for (const [key, choice] of Object.entries(GROK_MODEL_ALIAS_SEEDS)) {
+        if (!(key in aliases)) aliases[key] = choice;
+    }
+    return aliases;
+}
+
+const GROK_MODEL_ALIASES: Record<string, GrokModelChoice> = deriveGrokModelAliases();
+
+export const GROK_MODEL_ALIAS_KEYS: readonly string[] = Object.freeze(Object.keys(GROK_MODEL_ALIASES));
+
+export function grokModelLabels(choice: GrokModelChoice): readonly string[] {
+    return GROK_MODEL_OPTIONS[choice].labels;
+}
+
+/**
+ * Recognises an open model menu from its labels with the version left generic.
+ *
+ * The four probes each spelled the major and minor inline, so the day the web UI
+ * shipped a different major an open menu stopped reading as open. Deriving one
+ * pattern from the labels means a new release needs no probe edit, and the 2026-09-11
+ * observation that no Grok 4.x row existed at all is exactly that failure mode.
+ */
+export function grokModelMenuLabelPattern(): RegExp {
+    const alternatives = new Set<string>();
+    for (const { labels } of Object.values(GROK_MODEL_OPTIONS)) {
+        for (const label of labels) {
+            const versionless = label.replace(/\s*\d+(?:\.\d+)?\s*$/, '').trim();
+            const base = escapeRegExp(versionless || label);
+            alternatives.add(versionless && versionless !== label
+                ? `^${base}\\s+\\d+(?:\\.\\d+)?`
+                : `^${base}\\b`);
+        }
+    }
+    return new RegExp([...alternatives].join('|'), 'i');
+}
+
+const GROK_MENU_LABEL_PATTERN = grokModelMenuLabelPattern();
 
 export function normalizeGrokModelChoice(model: string | undefined): GrokModelChoice | null {
     const key = String(model || '').trim().toLowerCase();
@@ -80,7 +132,7 @@ export async function selectGrokModel(page: Page, model: string | undefined): Pr
 }
 
 async function openGrokModelMenu(page: Page, usedFallbacks: string[]): Promise<void> {
-    if (await page.locator('[role="menuitem"]').filter({ hasText: /^Auto\b|^Fast\b|^Expert\b|^Grok 4\.\d|^Heavy\b/i }).first().isVisible().catch(() => false)) return;
+    if (await page.locator('[role="menuitem"]').filter({ hasText: GROK_MENU_LABEL_PATTERN }).first().isVisible().catch(() => false)) return;
     const deadline = Date.now() + 5_000;
     while (Date.now() < deadline) {
         for (const selector of GROK_MODEL_MENU_BUTTONS) {
@@ -88,12 +140,12 @@ async function openGrokModelMenu(page: Page, usedFallbacks: string[]): Promise<v
             if (!(await loc.isVisible().catch(() => false))) continue;
             await loc.click({ timeout: 5_000 });
             await page.waitForTimeout(350).catch(() => undefined);
-            if (await page.locator('[role="menuitem"]').filter({ hasText: /^Auto\b|^Fast\b|^Expert\b|^Grok 4\.\d|^Heavy\b/i }).first().isVisible().catch(() => false)) return;
+            if (await page.locator('[role="menuitem"]').filter({ hasText: GROK_MENU_LABEL_PATTERN }).first().isVisible().catch(() => false)) return;
         }
         await page.waitForTimeout(150).catch(() => undefined);
     }
     usedFallbacks.push('model-menu-text-button');
-    const textButton = page.locator('button').filter({ hasText: /^Auto$|^Fast$|^Expert$|^Grok 4\.\d|^Heavy$/i }).first();
+    const textButton = page.locator('button').filter({ hasText: GROK_MENU_LABEL_PATTERN }).first();
     if (await textButton.isVisible().catch(() => false)) {
         await textButton.click({ timeout: 5_000 });
         await page.waitForTimeout(350).catch(() => undefined);
@@ -132,7 +184,7 @@ async function readGrokModel(page: Page): Promise<GrokModelChoice | null> {
 async function closeGrokModelMenu(page: Page): Promise<void> {
     for (let i = 0; i < 3; i += 1) {
         const menuVisible = await page.locator('[role="menuitem"]')
-            .filter({ hasText: /^Auto\b|^Fast\b|^Expert\b|^Grok 4\.\d|^Heavy\b/i }).first().isVisible().catch(() => false);
+            .filter({ hasText: GROK_MENU_LABEL_PATTERN }).first().isVisible().catch(() => false);
         if (!menuVisible) return;
         await page.keyboard.press('Escape').catch(() => undefined);
         await page.waitForTimeout(250).catch(() => undefined);

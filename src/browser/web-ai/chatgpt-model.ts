@@ -138,19 +138,84 @@ const CHATGPT_SIMPLIFIED_INTELLIGENCE_OPTIONS: Readonly<Record<ChatGptModelChoic
     },
 };
 
-const MODEL_ALIASES: Record<string, ChatGptModelChoice> = {
+/**
+ * Human-facing aliases that are not tied to any model generation. Seeded first
+ * so a derived slug can never take one of these names.
+ */
+const MODEL_ALIAS_SEEDS: Record<string, ChatGptModelChoice> = {
     instant: 'instant',
     fast: 'instant',
-    'gpt-5-3': 'instant',
-    'gpt-5.3': 'instant',
     thinking: 'thinking',
     think: 'thinking',
-    'gpt-5-5-thinking': 'thinking',
-    'gpt-5.5-thinking': 'thinking',
     pro: 'pro',
-    'gpt-5-5-pro': 'pro',
-    'gpt-5.5-pro': 'pro',
 };
+
+/** 'model-switcher-gpt-5-6-thinking-thinking-effort' -> 'gpt-5-6-thinking'. */
+function modelSlugFromTestId(testId: string): string {
+    return testId.replace(/^model-switcher-/, '').replace(/-thinking-effort$/, '');
+}
+
+/**
+ * 'gpt-5-6-thinking' -> 'gpt-5.6-thinking'. Only the version prefix is
+ * rewritten: collapsing the whole slug would drop the thinking/pro suffix and
+ * silently merge three distinct choices into one key.
+ */
+function dottedModelSlug(slug: string): string {
+    return slug.replace(/^gpt-(\d+)-(\d+)/, 'gpt-$1.$2');
+}
+
+/**
+ * Every model slug the DOM table knows about, newest generation first.
+ *
+ * CHATGPT_MODEL_OPTIONS is the one place a new generation gets added, so the
+ * accepted --model spellings are derived from it rather than written out a
+ * second time. They used to be two hand-maintained tables, and they drifted:
+ * the table above already listed gpt-5-6 while the alias list stopped at
+ * gpt-5-5-thinking, so a released client that could drive gpt-5-6 still
+ * rejected 'gpt-5.6' as an unsupported model.
+ */
+export function chatGptModelTestIdSlugs(): string[] {
+    const slugs: string[] = [];
+    for (const { testIds } of Object.values(CHATGPT_MODEL_OPTIONS)) {
+        for (const testId of testIds) {
+            const slug = modelSlugFromTestId(testId);
+            if (slug && !slugs.includes(slug)) slugs.push(slug);
+        }
+    }
+    return slugs;
+}
+
+/** Every model-switcher test-id the runtime will try, including effort triggers. */
+export function chatGptModelSelectorTestIds(): string[] {
+    const ids: string[] = [];
+    for (const { testIds } of Object.values(CHATGPT_MODEL_OPTIONS)) {
+        for (const testId of testIds) if (!ids.includes(testId)) ids.push(testId);
+    }
+    for (const { triggerTestIds } of Object.values(CHATGPT_MODEL_EFFORT_OPTIONS)) {
+        for (const testId of triggerTestIds) if (!ids.includes(testId)) ids.push(testId);
+    }
+    return ids;
+}
+
+function deriveModelAliases(): Record<string, ChatGptModelChoice> {
+    const aliases: Record<string, ChatGptModelChoice> = { ...MODEL_ALIAS_SEEDS };
+    for (const [choice, { testIds }] of Object.entries(CHATGPT_MODEL_OPTIONS) as [ChatGptModelChoice, { testIds: string[] }][]) {
+        for (const testId of testIds) {
+            const slug = modelSlugFromTestId(testId);
+            if (!slug) continue;
+            for (const key of [slug, dottedModelSlug(slug)]) {
+                // Exact keys, never prefix matching: 'gpt-5-5' and
+                // 'gpt-5-5-thinking' are different choices and must stay apart.
+                if (!(key in aliases)) aliases[key] = choice;
+            }
+        }
+    }
+    return aliases;
+}
+
+const MODEL_ALIASES: Record<string, ChatGptModelChoice> = deriveModelAliases();
+
+export const CHATGPT_MODEL_ALIAS_KEYS: readonly string[] = Object.freeze(Object.keys(MODEL_ALIASES));
 
 const EFFORT_ALIASES: Record<string, ChatGptEffortChoice> = {
     light: 'light',
@@ -765,6 +830,12 @@ export function modelChoiceFromText(text: string): ChatGptModelChoice | null {
     if (/\b(Medium|High|Extra High)\b|중간|높음|매우 높음/i.test(text)) return 'thinking';
     if (/\b(Thinking|Think)\b/i.test(text)) return 'thinking';
     if (/\b(Pro|Heavy)\b/i.test(text)) return 'pro';
+    // Observed live on 2026-09-11: the menu rows read 'Latest', 'GPT-5.6 Sol'
+    // and 'GPT-5.5' with no data-testid at all, and both fell through to null,
+    // which left the label fallback unable to identify the base tier. Every
+    // qualifier is matched above, so reaching here means an unqualified row.
+    if (/^\s*Latest\b/i.test(text)) return 'instant';
+    if (/^\s*(?:ChatGPT\s+)?GPT[-\s]?\d/i.test(text)) return 'instant';
     return null;
 }
 
