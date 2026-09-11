@@ -600,22 +600,25 @@ export { armExitSettle, settleExit, waitForExitSettled };
  * 도 검사하므로, 이걸 비우지 않으면 stop 직후 새 메시지가 busy 분기 → 큐로 떨어지고
  * 프론트는 (1) 낙관 bubble + (2) applyQueuedOverlay 가 만든 queued bubble = 2개를 보여준다.
  */
+/**
+ * Stop the scope's employees, then forget them.
+ *
+ * Clearing the registry only forgets the slot; it never stopped the child. Claude
+ * employees die earlier, inside cancelClaudeScope(..., includeWorkers), so the gap
+ * was invisible there — and every OTHER runtime's employee survived a user stop:
+ * still running, still streaming into a scope the boss had abandoned, still holding
+ * its isolated cwd. The two sibling paths already get this right: orchestrateReset
+ * kills before clearing (orchestrator/pipeline.ts) and the worker timeout calls
+ * killAgentById (orchestrator/distribute.ts). Only the stop path was missing it.
+ *
+ * cancelWorker matches reset for the same reason: deleting a slot leaves its worker
+ * run row 'running' forever, because finishWorker and failWorker both no-op once the
+ * slot is gone. getActiveWorkers returns a fresh array, so killing inside the loop
+ * cannot mutate what is being iterated.
+ */
 function clearWorkerSlotsOnStop(scopeKey: string, reason: string) {
     const active = getActiveWorkers(scopeKey);
     if (active.length === 0 && !hasPendingWorkerReplays(scopeKey)) return;
-    // Clearing the registry only forgets the slot; it never stopped the child.
-    // Claude employees die earlier, inside cancelClaudeScope(..., includeWorkers),
-    // so before this every OTHER runtime's employee survived a user stop: still
-    // running, still streaming into a scope the boss had abandoned, still holding
-    // its isolated cwd. The two sibling paths already get this right —
-    // orchestrateReset kills before clearing (orchestrator/pipeline.ts) and the
-    // worker timeout calls killAgentById (orchestrator/distribute.ts) — only the
-    // stop path was missing it.
-    //
-    // cancelWorker matches reset: deleting a slot leaves its worker run row
-    // 'running' forever, because finishWorker and failWorker both no-op once the
-    // slot is gone. getActiveWorkers returns a fresh array, so killing inside this
-    // loop cannot mutate what is being iterated.
     for (const slot of active) {
         killAgentById(slot.agentId);
         cancelWorker(slot.agentId);
