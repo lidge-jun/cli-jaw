@@ -173,10 +173,10 @@ export const SETTINGS_MERGE_SPEC: Readonly<Record<string, NestedMergeRule>> = {
 
 /** Lay the incoming document over the base per SETTINGS_MERGE_SPEC, mutating neither. */
 export function mergeSettingsLayer(
-    base: Record<string, any>,
-    incoming: Record<string, any>,
-): Record<string, any> {
-    const result: Record<string, any> = { ...base };
+    base: Record<string, unknown>,
+    incoming: Record<string, unknown>,
+): Record<string, unknown> {
+    const result: Record<string, unknown> = { ...base };
     for (const [key, value] of Object.entries(incoming)) {
         const rule = SETTINGS_MERGE_SPEC[key];
         // A scalar, an array or an explicit null replaces the block. Only an
@@ -187,7 +187,7 @@ export function mergeSettingsLayer(
         }
         const current = isPlainRecord(base[key]) ? base[key] : {};
         if (rule.kind === 'perEntry') {
-            const merged: Record<string, any> = { ...current };
+            const merged: Record<string, unknown> = { ...current };
             for (const [entry, cfg] of Object.entries(value)) {
                 merged[entry] = isPlainRecord(cfg) && isPlainRecord(merged[entry])
                     ? { ...merged[entry], ...cfg }
@@ -196,7 +196,7 @@ export function mergeSettingsLayer(
             result[key] = merged;
             continue;
         }
-        const merged: Record<string, any> = { ...current, ...value };
+        const merged: Record<string, unknown> = { ...current, ...value };
         if (rule.kind === 'nested') {
             for (const child of rule.children) {
                 if (!isPlainRecord(value[child])) continue;
@@ -216,7 +216,9 @@ export function mergeSettingsLayer(
  * @returns {object} 새 settings (current를 직접 변경하지 않음)
  */
 export function mergeSettingsPatch(current: Record<string, any>, patch: Record<string, any>) {
-    const result = mergeSettingsLayer(structuredClone(current), patch);
+    // The layer speaks in unknown so it adds no any-typed surface; the patch API
+    // has always handed callers an indexable settings object, so it keeps doing so.
+    const result = mergeSettingsLayer(structuredClone(current), patch) as Record<string, any>;
 
     // Normalization, not merging. ack.emoji is a third level the spec does not
     // reach, and slack.autoJoin has to be REPAIRED rather than combined: its
@@ -227,7 +229,7 @@ export function mergeSettingsPatch(current: Record<string, any>, patch: Record<s
     for (const key of ['telegram', 'discord', 'slack']) {
         const patchChannel = patch[key];
         if (!isPlainRecord(patchChannel)) continue;
-        const currentChannel = current[key] as Record<string, any> | undefined;
+        const currentChannel = isPlainRecord(current[key]) ? current[key] : undefined;
         const patchAck = patchChannel['ack'];
         if (isPlainRecord(patchAck)) {
             result[key] = { ...result[key], ack: mergeAckSettings(currentChannel?.['ack'], patchAck) };

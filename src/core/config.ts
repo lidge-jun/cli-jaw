@@ -1167,7 +1167,7 @@ export function loadSettings() {
                 ...(sourceVersion === 1 ? { cli: legacyCli } : {}),
                 perCli: mergedPerCli,
             },
-        );
+        ) as Record<string, any>;
         // Everything below is normalization, and the merge must not swallow it.
         // ack is a third level the spec does not reach; slack.autoJoin repairs a
         // budget that reaches a loop joining real channels; search.engine is a
