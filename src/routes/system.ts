@@ -4,6 +4,7 @@
 // re-derived here, so it arrives as a factory dep.
 
 import type { Router } from 'express';
+import type { AuthMiddleware } from './types.js';
 import { fail, ok } from '../http/response.js';
 import { isLoopbackAddress } from '../http/loopback.js';
 import { APP_VERSION, settings } from '../core/config.js';
@@ -33,7 +34,12 @@ function getRuntimeSnapshot() {
     };
 }
 
-export function registerSystemRoutes(app: Router, deps: { jawAuthToken: string }): void {
+// `requireAuth` sits in the sibling registrars' position (#684). Only the three
+// probe routes below stay public: liveness, readiness and the secret-free Slack
+// manifest. `/api/auth/token` keeps its own stricter loopback check instead,
+// because `requireAuth` also admits LAN peers when lanBypass is on and that
+// would turn the token endpoint into a LAN token mint.
+export function registerSystemRoutes(app: Router, requireAuth: AuthMiddleware, deps: { jawAuthToken: string }): void {
     // LIVENESS. `ok` stays a constant on purpose (#471): it was added for
     // Docker HEALTHCHECK, and Docker restarts the container and the manager
     // drops the instance when it goes false. A CLI that cannot be resolved is
@@ -95,12 +101,12 @@ export function registerSystemRoutes(app: Router, deps: { jawAuthToken: string }
         }
     });
 
-    app.get('/api/session', (_, res) => ok(res, getSession(), getSession() as Record<string, unknown> | undefined));
+    app.get('/api/session', requireAuth, (_, res) => ok(res, getSession(), getSession() as Record<string, unknown> | undefined));
 
     // Memory composition probe: splits the JS
     // heap from native/mmap so RSS investigations can tell "V8 objects" apart
     // from "sqlite-mapped pages + native addons" without a debugger attach.
-    app.get('/api/debug/mem', (_req, res) => {
+    app.get('/api/debug/mem', requireAuth, (_req, res) => {
         const m = process.memoryUsage();
         const mb = (n: number) => Math.round(n / 1024 / 1024);
         res.json({
@@ -116,7 +122,7 @@ export function registerSystemRoutes(app: Router, deps: { jawAuthToken: string }
         });
     });
 
-    app.get('/api/runtime', (req, res) => {
+    app.get('/api/runtime', requireAuth, (req, res) => {
         if (req.query["logs"] === 'tail') {
             const lines = drainLogRing();
             res.json({ ok: true, lines });

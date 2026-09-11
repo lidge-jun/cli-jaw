@@ -393,7 +393,7 @@ registerGoalRoutes(app, requireAuth);
 registerTaskRoutes(app, requireAuth);
 registerBgtaskRoutes(app, requireAuth);
 registerEventsRoutes(app, requireAuth);
-registerInstanceRoutes(app);
+registerInstanceRoutes(app, requireAuth);
 registerChatSessionRoutes(app, requireAuth);
 registerMessageRoutes(app, requireAuth);
 const searchRegistry = new SearchProviderRegistry();
@@ -409,7 +409,7 @@ registerSearchRoutes(app, requireAuth, new SearchCoordinator(searchRegistry));
 // than imported by the wiki module so core keeps no dependency on manager config.
 setForbiddenWikiRoots([dashboardPath('notes')]);
 registerWikiRoutes(app, requireAuth, { forbiddenRoots: () => forbiddenWikiRoots() });
-registerSystemRoutes(app, { jawAuthToken: JAW_AUTH_TOKEN });
+registerSystemRoutes(app, requireAuth, { jawAuthToken: JAW_AUTH_TOKEN });
 registerAgentControlRoutes(app, requireAuth);
 registerCommandRoutes(app, requireAuth);
 registerGoalRunRoutes(app, requireAuth);

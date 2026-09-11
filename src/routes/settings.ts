@@ -458,7 +458,7 @@ export function registerSettingsRoutes(
         res.json(await getProjectGitSummary(settings["projectDirs"]));
     }));
 
-    app.get('/api/codex-context', (_, res) => {
+    app.get('/api/codex-context', requireAuth, (_, res) => {
         res.json(readCodexContextWindow());
     });
 
@@ -478,7 +478,7 @@ export function registerSettingsRoutes(
         res.json({ ok: true });
     });
 
-    app.get('/api/prompt-templates', (_, res) => {
+    app.get('/api/prompt-templates', requireAuth, (_, res) => {
         const dir = getTemplateDir();
         const files = fs.readdirSync(dir).filter((f: string) => f.endsWith('.md'));
         const templates = files.map((f: string) => ({
@@ -519,7 +519,7 @@ export function registerSettingsRoutes(
         res.json({ ok: true });
     });
 
-    app.get('/api/heartbeat-md', (_, res) => {
+    app.get('/api/heartbeat-md', requireAuth, (_, res) => {
         const content = fs.existsSync(HEARTBEAT_PATH) ? fs.readFileSync(HEARTBEAT_PATH, 'utf8') : '';
         res.json({ content });
     });
@@ -587,7 +587,7 @@ export function registerSettingsRoutes(
         }
     });
 
-    app.get('/api/mcp/registry', async (_, res) => {
+    app.get('/api/mcp/registry', requireAuth, async (_, res) => {
         try {
             const { fetchMcpRegistry, fetchMcpRegistryLocal } = await import('../../lib/mcp/mcp-registry.js');
             const localCandidates = [
@@ -606,14 +606,14 @@ export function registerSettingsRoutes(
         }
     });
 
-    app.get('/api/cli-registry', asyncHandler(async (_, res) => {
+    app.get('/api/cli-registry', requireAuth, asyncHandler(async (_, res) => {
         ok(res, await buildLiveCliRegistry());
     }));
     // `?force=1` skips the failure backoff. Retries are demand-driven with no
     // timer, so without this a user who fixed the underlying problem would keep
     // seeing the stale failure until the backoff expired, even after an
     // explicit refresh (#277).
-    app.get('/api/cli-status', (req, res) => {
+    app.get('/api/cli-status', requireAuth, (req, res) => {
         const force = req.query['force'] === '1' || req.query['force'] === 'true';
         const cached = force ? getCachedCliStatusForced() : getCachedCliStatus();
         // `lastStartFailure` is a sibling of the cached row, never a member of it:
@@ -682,7 +682,7 @@ export function registerSettingsRoutes(
         });
     }));
 
-    app.get('/api/quota', async (_, res) => {
+    app.get('/api/quota', requireAuth, async (_, res) => {
         const claudeCreds = readClaudeCreds();
         const codexTokens = readCodexTokens();
         const settleQuota = (read: () => Promise<unknown>) => Promise.resolve().then(read)
