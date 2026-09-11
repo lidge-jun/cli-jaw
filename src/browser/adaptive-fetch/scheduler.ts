@@ -56,6 +56,10 @@ export async function executeAdaptiveFetch(
     // actually aborted at the deadline — not merely skipped before the next
     // stage. The signal flows through fetchOpt into every HTTP fetch path
     // (direct/discovered/jina) and is combined with each request's own timeout.
+    // Known gap (#693): the two subprocess readers are NOT on that signal.
+    // tlsFetch and ytdlpMetadata take no AbortSignal and rely on their own
+    // execFile timeouts, so the deadline can expire while curl-impersonate or
+    // yt-dlp is still running. Read "every HTTP fetch path" literally.
     const deadlineController = new AbortController();
     const deadlineTimer = setTimeout(
         () => deadlineController.abort(new Error('overall-deadline-exceeded')),
