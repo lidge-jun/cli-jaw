@@ -43,7 +43,7 @@ import {
 } from './session-persistence.js';
 import { isCompactMarkerRow } from '../core/compact.js';
 import { isRuntimeSettingsMutationInFlight, waitForRuntimeSettingsIdle } from '../core/runtime-settings-gate.js';
-import { hasBlockingWorkers, hasPendingWorkerReplays, getActiveWorkers, clearAllWorkers, clearWorkersForScope } from '../orchestrator/worker-registry.js';
+import { hasBlockingWorkers, hasPendingWorkerReplays, getActiveWorkers, clearAllWorkers, clearWorkersForScope, cancelWorker } from '../orchestrator/worker-registry.js';
 import { sanitizeWorkerProgressTools } from '../orchestrator/worker-progress.js';
 import { handleAgentExit, setSpawnAgent, setMainMetaHandler } from './lifecycle-handler.js';
 import { buildServicePath } from '../core/runtime-path.js';
@@ -421,6 +421,17 @@ export function killAgentById(agentId: string): boolean {
     if (!proc) return false;
     try {
         if (cancelOwnedPiProcess(proc, 'user')) return true;
+        // Record the stop the way killActiveAgent does for a main run (below). Only
+        // the Pi branch above used to stamp a reason, so a deliberately stopped
+        // employee on every other runtime reached handleAgentExit with
+        // wasKilled=false and was classified as a crash. For an employee with a
+        // non-zero exit that is not cosmetic: lifecycle-handler's employee retry
+        // branch (`isEmployee && code !== 0 && !wasKilled`) respawns the very turn
+        // the caller just cancelled.
+        //
+        // Live pid only, for the same reason cancelOwnedPiProcess checks: stamping
+        // an already-exited pid is how a recycled pid inherits a foreign kill reason.
+        if (proc.pid && !hasChildExited(proc)) killReasons.set(proc.pid, 'user');
         // Same owner as killActiveAgent. The hand-rolled version here escalated on a
         // bare 3s timer with no liveness re-check, so a CLI that traps SIGTERM either
         // survived or, worse, the delayed SIGKILL landed on a recycled PID. Worker
@@ -590,10 +601,27 @@ export { armExitSettle, settleExit, waitForExitSettled };
  * 프론트는 (1) 낙관 bubble + (2) applyQueuedOverlay 가 만든 queued bubble = 2개를 보여준다.
  */
 function clearWorkerSlotsOnStop(scopeKey: string, reason: string) {
-    const active = getActiveWorkers(scopeKey).length;
-    if (active === 0 && !hasPendingWorkerReplays(scopeKey)) return;
+    const active = getActiveWorkers(scopeKey);
+    if (active.length === 0 && !hasPendingWorkerReplays(scopeKey)) return;
+    // Clearing the registry only forgets the slot; it never stopped the child.
+    // Claude employees die earlier, inside cancelClaudeScope(..., includeWorkers),
+    // so before this every OTHER runtime's employee survived a user stop: still
+    // running, still streaming into a scope the boss had abandoned, still holding
+    // its isolated cwd. The two sibling paths already get this right —
+    // orchestrateReset kills before clearing (orchestrator/pipeline.ts) and the
+    // worker timeout calls killAgentById (orchestrator/distribute.ts) — only the
+    // stop path was missing it.
+    //
+    // cancelWorker matches reset: deleting a slot leaves its worker run row
+    // 'running' forever, because finishWorker and failWorker both no-op once the
+    // slot is gone. getActiveWorkers returns a fresh array, so killing inside this
+    // loop cannot mutate what is being iterated.
+    for (const slot of active) {
+        killAgentById(slot.agentId);
+        cancelWorker(slot.agentId);
+    }
     clearWorkersForScope(scopeKey);
-    console.log(`[jaw:stop] cleared worker registry (active=${active}, scope=${scopeKey}, reason=${reason})`);
+    console.log(`[jaw:stop] stopped and cleared worker registry (active=${active.length}, scope=${scopeKey}, reason=${reason})`);
 }
 
 function clearMainLiveRunOnStop(scopeKey: string, reason: string): void {
