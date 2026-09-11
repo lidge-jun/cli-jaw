@@ -1,6 +1,6 @@
 import type {
     CodeContextUsage, CodeCreateSessionRequest, CodeModelCatalog, CodePatchSessionRequest,
-    CodePermissionRequest, CodeSessionInfo, CodeWireEvent,
+    CodePermissionRequest, CodePromptReceipt, CodeSessionInfo, CodeWireEvent,
 } from '../../../../src/code-mode/wire';
 import type { CodeControllerModel, CodeControllerOptions, CodeSessionFilter, CodeTransportState } from './code-controller-types';
 import { CodeClientError, codeBaseOrigin, createCodeSessionClient, type CodeGitInfo } from './code-session-client';
@@ -21,6 +21,35 @@ const rejected = (error: unknown) => error instanceof CodeClientError && error.s
 const newer = (incoming: CodeSessionInfo, current?: CodeSessionInfo | null) => !current
     || incoming.epoch > current.epoch || (incoming.epoch === current.epoch && (incoming.sequence > current.sequence
         || (incoming.sequence === current.sequence && incoming.revision >= current.revision)));
+
+/**
+ * A receipt status that means the send is spent without having produced work.
+ *
+ * The server consumes a `clientTurnKey` once. After a restart seals an
+ * interrupted turn, the same key returns only a duplicate receipt — HTTP 200,
+ * `ok:true`, and the stored status — and starts nothing. Answering a retry with
+ * that receipt as if it were an admission is what left the composer idle on a
+ * session that had failed.
+ *
+ * `completed` is deliberately absent: that turn ran, and its output is in the
+ * transcript, so closing the send is the honest outcome.
+ */
+const spent = (status: CodePromptReceipt['status']): boolean => status === 'failed' || status === 'cancelled';
+
+/**
+ * Did the transcript already settle the turn this send belongs to?
+ *
+ * The HTTP receipt is only visible when the client actually posts. After a
+ * reload the draft is restored with its original key and the first refresh sees
+ * the orphaned turn's own `user_message` still in history, so the guard has to
+ * read the transcript rather than the response.
+ */
+function deadSend(state: CodeSessionState | undefined, key: string): boolean {
+    const sent = state?.items.find(item => item.kind === 'user_message' && item.clientTurnKey === key);
+    if (!sent) return false;
+    return state!.items.some(item => item.turnId === sent.turnId
+        && (item.kind === 'turn_failed' || item.kind === 'turn_cancelled'));
+}
 
 /**
  * What a read that could actually observe the runtime said about attention.
@@ -225,7 +254,8 @@ export class CodeController {
         if (state.session) this.accept(state.session);
         const draft = this.book.sessions.get(id);
         if (draft?.retry && state.items.some(item => item.kind === 'user_message' && item.clientTurnKey === draft.retry!.key)) {
-            acknowledgeCodeSend(draft, draft.retry.key);
+            if (deadSend(state, draft.retry.key)) this.requireNewKey(draft);
+            else acknowledgeCodeSend(draft, draft.retry.key);
         }
         if (draft && state.synced) {
             const current = new Set(state.permissions.map(p => p.permissionId));
@@ -234,6 +264,19 @@ export class CodeController {
             }
         }
         this.notify();
+    }
+    /**
+     * Keep the message, retire the key.
+     *
+     * The server will answer that spent key with the same duplicate receipt
+     * forever, so retrying it is not a retry. Rotating gives Retry something that
+     * can actually be admitted, and it also stops the settled turn's own
+     * `user_message` from matching, so this fires once rather than on every read.
+     */
+    private requireNewKey(draft: CodeDraft): void {
+        if (!draft.retry) return;
+        draft.retry = { ...draft.retry, key: crypto.randomUUID() };
+        draft.operation = { kind: 'unknown-send', error: 'The original attempt ended on the server without running. The message was not resent; Retry will submit it as a new message.' };
     }
     private makeModel(): CodeControllerModel {
         const id = this.book.selectedId;
@@ -396,7 +439,8 @@ export class CodeController {
         const draft = this.book.sessions.get(event.sessionId);
         if (event.item?.kind === 'user_message' && event.item.clientTurnKey && draft?.retry?.key === event.item.clientTurnKey) {
             draft.requiredSequence = Math.max(draft.requiredSequence, event.sequence);
-            acknowledgeCodeSend(draft, event.item.clientTurnKey);
+            if (deadSend(this.details.get(event.sessionId), event.item.clientTurnKey)) this.requireNewKey(draft);
+            else acknowledgeCodeSend(draft, event.item.clientTurnKey);
         }
         const previous = this.details.get(event.sessionId);
         if (!previous) { this.notify(); return; }
@@ -603,7 +647,10 @@ export class CodeController {
             draft.requiredSequence = Math.max(draft.requiredSequence, receipt.sequence);
             const state = this.details.get(id);
             if (state) this.details.set(id, reduceCodeSession(state, { type: 'stale' }));
-            acknowledgeCodeSend(draft, attempt.key);
+            // A duplicate receipt for a spent key is a report about a turn that is
+            // already over, not an admission of this one.
+            if (spent(receipt.status)) this.requireNewKey(draft);
+            else acknowledgeCodeSend(draft, attempt.key);
         } catch (error) {
             // The committed user event may already have acknowledged a lost HTTP response.
             if (draft.retry?.key === attempt.key) {
