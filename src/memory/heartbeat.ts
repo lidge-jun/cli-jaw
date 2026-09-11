@@ -16,10 +16,23 @@ import { nextDeliverySeq, wasSelfDelivered } from '../messaging/turn-delivery.js
 import { isHeartbeatMentionWatch } from '../core/config.js';
 import type { HeartbeatMentionWatch } from '../core/config.js';
 import { runMentionWatchTick } from './heartbeat-mention-watch.js';
-import { resolveHeartbeatBinding, heartbeatHoldMessage, type HeartbeatBinding } from './heartbeat-destination.js';
+import {
+    resolveHeartbeatBinding,
+    verifyHeartbeatThreadBindingLive,
+    heartbeatHoldMessage,
+    type HeartbeatBinding,
+    type HeartbeatHoldReason,
+} from './heartbeat-destination.js';
 import { watchNamespace } from './mention-watch-ledger.js';
 import { detectLegacyMentionWatch, isQuarantined } from './legacy-mention-watch-quarantine.js';
 import { verifiedSlackWorkspace } from '../slack/verified-workspace.js';
+import {
+    reserveSlackToolGrant,
+    activateSlackToolGrant,
+    revokeSlackToolGrant,
+    slackCredentialKey,
+    SLACK_TOOL_GRANT_ENV,
+} from '../slack/tool-context.js';
 import { buildRemoteBindingKey } from '../messaging/session-key.js';
 import { getRemoteBoundSessionId, resolveOrCreateRemoteSession } from '../core/chat-sessions.js';
 import { hasChatSessionWork } from '../orchestrator/session-work.js';
@@ -73,6 +86,50 @@ interface PendingHeartbeatJob {
     policy?: HeartbeatPendingPolicy;
 }
 const pendingJobs: PendingHeartbeatJob[] = [];
+type LiveDestinationHold = { destination: string; reason: HeartbeatHoldReason; observedAt: number };
+const liveDestinationHolds = new Map<string, LiveDestinationHold>();
+type HeartbeatDestinationJobRef = { id?: unknown; name?: unknown; destination?: unknown };
+
+function heartbeatJobKey(job: HeartbeatDestinationJobRef): string {
+    return String(job.id ?? job.name ?? '');
+}
+
+function destinationFingerprint(destination: unknown): string {
+    try { return JSON.stringify(destination ?? null); }
+    catch { return '[unserializable]'; }
+}
+
+/** Process-local live hold for GET/UI. A destination edit invalidates it
+ * immediately; a successful later tick clears it. The timer remains armed so a
+ * transient Slack failure can recover without an operator save. */
+export function getHeartbeatLiveDestinationHold(job: HeartbeatDestinationJobRef): HeartbeatHoldReason | null {
+    const key = heartbeatJobKey(job);
+    if (!key) return null;
+    const hold = liveDestinationHolds.get(key);
+    if (!hold) return null;
+    if (hold.destination !== destinationFingerprint(job.destination)) {
+        liveDestinationHolds.delete(key);
+        return null;
+    }
+    return hold.reason;
+}
+
+export function updateHeartbeatLiveDestinationHold(
+    job: HeartbeatDestinationJobRef,
+    reason: HeartbeatHoldReason | null,
+): void {
+    const key = heartbeatJobKey(job);
+    if (!key) return;
+    if (reason === null) {
+        liveDestinationHolds.delete(key);
+        return;
+    }
+    liveDestinationHolds.set(key, {
+        destination: destinationFingerprint(job.destination),
+        reason,
+        observedAt: Date.now(),
+    });
+}
 
 export function isHeartbeatQuietOutput(result: string, extraMarkers: string[] = []): boolean {
     return ['[SILENT]', ...extraMarkers].some(marker => marker.length > 0 && result.includes(marker));
@@ -185,25 +242,43 @@ export function decideHeartbeatReport(report: HeartbeatReport, policy: string): 
     return { send: true, anchor: true, delivered: true };
 }
 
-export function runHeartbeatScript(command: string[]): Promise<HeartbeatReport> {
+export function runHeartbeatScript(
+    command: string[],
+    extraEnv: Record<string, string> = {},
+): Promise<HeartbeatReport> {
     return new Promise(resolve => {
         const [file, ...args] = command;
         if (!file) { resolve(parseHeartbeatReport('', 1)); return; }
-        execFile(file, args, { timeout: 10 * 60_000, maxBuffer: 64 * 1024 }, (error, stdout, stderr) => {
+        execFile(file, args, {
+            timeout: 10 * 60_000,
+            maxBuffer: 64 * 1024,
+            env: { ...process.env, ...extraEnv },
+        }, (error, stdout, stderr) => {
             const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'number' ? error.code : error ? 1 : 0;
             resolve(parseHeartbeatReport([stdout, stderr].filter(Boolean).join('\n'), code));
         });
     });
 }
 
-async function runEmployee(job: Record<string, any>, prompt: string): Promise<HeartbeatReport> {
+async function runEmployee(
+    job: Record<string, any>,
+    prompt: string,
+    requestId: string,
+    target: RemoteTarget,
+): Promise<HeartbeatReport> {
     const emp = (getEmployees.all() as EmployeeRow[]).find(row => row.name === job["employee"]);
     if (!emp) return parseHeartbeatReport('status: failed\nsummary: employee not found');
     try {
         const slot = claimWorker(emp, prompt, { origin: 'heartbeat', scopeId: HEARTBEAT_SCOPE, chatSessionId: 'default' });
         try {
             const ap = { agent: emp.name, role: emp.role || 'general developer', task: prompt, parallel: false, currentPhase: 0, currentPhaseIdx: 0, phaseProfile: [0], mutable: false, scope: null, task_tags: ['heartbeat'] };
-            const result = await runSingleAgent(ap, emp, { tag: `heartbeat:${job["id"] || job["name"]}` }, 1, { origin: 'heartbeat' }, []);
+            const result = await runSingleAgent(ap, emp, { tag: `heartbeat:${job["id"] || job["name"]}` }, 1, {
+                origin: 'heartbeat',
+                scopeKey: HEARTBEAT_SCOPE,
+                chatSessionId: 'default',
+                requestId,
+                target,
+            }, []);
             const text = String(result["text"] || '');
             finishWorker(slot.agentId, text, Array.isArray(result["tools"]) ? result["tools"] : []);
             // finishWorker arms a replay for a Boss to collect. A heartbeat has no
@@ -471,7 +546,32 @@ function buildMentionWatchPrompt(
     ].join('\n');
 }
 
-export async function runHeartbeatJob(job: Record<string, any>) {
+export type HeartbeatJobDeps = {
+    verifyDestination?: (destination: unknown) => Promise<HeartbeatBinding>;
+    reserveDestinationGrant?: (binding: Extract<HeartbeatBinding, { state: 'bound' }>, requestId: string) =>
+        Promise<(() => void) | null>;
+    activateDestinationGrant?: (requestId: string) => string | undefined;
+};
+
+async function reserveHeartbeatDestinationGrant(
+    binding: Extract<HeartbeatBinding, { state: 'bound' }>,
+    requestId: string,
+): Promise<(() => void) | null> {
+    if (binding.target.channel !== 'slack') return () => {};
+    const token = String(settings["slack"]?.botToken ?? '').trim();
+    const workspace = await verifiedSlackWorkspace(token, { sensitiveResponse: true }).catch(() => null);
+    if (!workspace?.userId) return null;
+    const reserved = reserveSlackToolGrant({
+        teamId: workspace.teamId,
+        actorId: workspace.userId,
+        destination: binding.target,
+        credentialKey: slackCredentialKey(token),
+        enforceDestination: true,
+    }, { requestId, scope: HEARTBEAT_SCOPE, chatSessionId: 'default' });
+    return reserved ? () => revokeSlackToolGrant(requestId) : null;
+}
+
+export async function runHeartbeatJob(job: Record<string, any>, deps: HeartbeatJobDeps = {}) {
     const runner = job["runner"] || 'main';
     if (runner === 'main' && getState('default') !== 'IDLE') {
         const queued = queueHeartbeatJob(job, 'pabcd_active', 'defer');
@@ -506,6 +606,20 @@ export async function runHeartbeatJob(job: Record<string, any>) {
             await runMentionWatchJob(job, watch);
             return;
         }
+        // Resolve and, for a Slack thread, prove the destination BEFORE spending
+        // model, employee or script work. A report whose address is stale or
+        // unverified must not run first and discover only at delivery time that
+        // it has nowhere safe to go (#745).
+        const destinationBinding = await (deps.verifyDestination
+            ?? ((destination: unknown) => verifyHeartbeatThreadBindingLive(destination, {
+                token: String(settings["slack"]?.botToken ?? ''),
+            })))(job["destination"]);
+        if (destinationBinding.state === 'held') {
+            updateHeartbeatLiveDestinationHold(job, destinationBinding.reason);
+            log.error(`[heartbeat:${job["name"]}] refuse: ${destinationBinding.reason} — ${heartbeatHoldMessage(destinationBinding.reason)}`);
+            return;
+        }
+        updateHeartbeatLiveDestinationHold(job, null);
         const schedule = normalizeHeartbeatSchedule(job["schedule"]);
         const timeZone = getHeartbeatScheduleTimeZone(schedule);
         const now = formatHeartbeatNow(schedule);
@@ -513,19 +627,78 @@ export async function runHeartbeatJob(job: Record<string, any>) {
         const goalSection = goalPrompt ? `\n\n--- Active Goal ---\n${goalPrompt}\n--- End Goal ---\n` : '';
         const prompt = `[heartbeat:${job["name"]}] 현재 시간: ${now} (${timeZone})\n\nBefore responding, you MUST search memory (cli-jaw memory search) for recent conversation context, user preferences, and ongoing tasks. Use this context to ground your response.${goalSection}\n\n${job["prompt"] || '정기 점검입니다. 할 일 없으면 [SILENT]로 응답.'}`;
         log.info(`[heartbeat:${job["name"]}] tick (${describeHeartbeatSchedule(schedule)})`);
+        const withDestinationGuard = async <T>(
+            operation: (requestId: string) => Promise<T>,
+        ): Promise<{ ok: true; value: T } | { ok: false }> => {
+            const requestId = crypto.randomUUID();
+            const release = await (deps.reserveDestinationGrant ?? reserveHeartbeatDestinationGrant)(
+                destinationBinding,
+                requestId,
+            );
+            if (!release) {
+                updateHeartbeatLiveDestinationHold(job, 'slack_grant_unavailable');
+                return { ok: false };
+            }
+            try {
+                return { ok: true, value: await operation(requestId) };
+            } finally {
+                release();
+            }
+        };
         let rawResult: string;
         if (runner === 'employee') {
-            rawResult = (await runEmployee(job, prompt)).raw;
+            const guarded = await withDestinationGuard(
+                requestId => runEmployee(job, prompt, requestId, destinationBinding.target).then(report => report.raw),
+            );
+            if (!guarded.ok) {
+                log.error(`[heartbeat:${job["name"]}] refuse: slack_grant_unavailable — employee authority could not be reserved`);
+                return;
+            }
+            rawResult = guarded.value;
         } else if (runner === 'script') {
-            const scriptReport = await runHeartbeatScript(job["command"] || []);
+            const guarded = await withDestinationGuard(async requestId => {
+                let grantEnv: Record<string, string> = {};
+                if (destinationBinding.target.channel === 'slack') {
+                    const secret = (deps.activateDestinationGrant
+                        ?? (id => activateSlackToolGrant(id, HEARTBEAT_SCOPE, 'default')))(requestId);
+                    if (!secret) throw new Error('slack_grant_activation_failed');
+                    grantEnv = { [SLACK_TOOL_GRANT_ENV]: secret };
+                }
+                return runHeartbeatScript(job["command"] || [], grantEnv);
+            });
+            if (!guarded.ok) {
+                log.error(`[heartbeat:${job["name"]}] refuse: slack_grant_unavailable — script authority could not be reserved`);
+                return;
+            }
+            const scriptReport = guarded.value;
             rawResult = scriptReport.status === 'failed' && !/^status:/m.test(scriptReport.raw)
                 ? `${scriptReport.raw}\nstatus: failed\nsummary: ${scriptReport.summary || 'script failed'}`
                 : scriptReport.raw;
         } else {
-            const first = await orchestrateAndCollectData(prompt, { origin: 'heartbeat', requestId: crypto.randomUUID(), scope: HEARTBEAT_SCOPE, chatSessionId: 'default' });
+            const collect = async () => {
+                const guarded = await withDestinationGuard(
+                    requestId => orchestrateAndCollectData(prompt, {
+                        origin: 'heartbeat',
+                        requestId,
+                        scope: HEARTBEAT_SCOPE,
+                        chatSessionId: 'default',
+                        target: destinationBinding.target,
+                    }),
+                );
+                return guarded.ok ? guarded.value : null;
+            };
+            const first = await collect();
+            if (!first) {
+                log.error(`[heartbeat:${job["name"]}] refuse: slack_grant_unavailable — destination-bound Slack authority could not be reserved`);
+                return;
+            }
             const collected = first.data.agyPlannerOnly === true
-                ? await orchestrateAndCollectData(prompt, { origin: 'heartbeat', requestId: crypto.randomUUID(), scope: HEARTBEAT_SCOPE, chatSessionId: 'default' })
+                ? await collect()
                 : first;
+            if (!collected) {
+                log.error(`[heartbeat:${job["name"]}] refuse: slack_grant_unavailable — retry authority could not be reserved`);
+                return;
+            }
             rawResult = String(collected.text);
         }
         const result = applyOutputPolicy(rawResult, { scope: 'heartbeat', channel: 'active' }).text;
@@ -550,16 +723,10 @@ export async function runHeartbeatJob(job: Record<string, any>) {
         // active-channel fallback that used to stand in for a missing
         // destination is gone: it delivered to whoever spoke to the bot most
         // recently, which is not a property of this job at all (#437, #745).
-        const binding = heartbeatTarget(job["destination"]);
-        if (binding.state === 'held') {
-            log.error(`[heartbeat:${job["name"]}] refuse: ${binding.reason} — ${heartbeatHoldMessage(binding.reason)}`);
-        }
         const sendResult = !decision.send
             ? { ok: true as const }
-            : binding.state === 'bound'
-                ? await sendChannelOutput({ channel: binding.target.channel, type: 'text', text: formatted,
-                    target: binding.target, allowActiveFallback: false })
-                : { ok: false as const, error: `heartbeat destination held: ${binding.reason}` };
+            : await sendChannelOutput({ channel: destinationBinding.target.channel, type: 'text', text: formatted,
+                target: destinationBinding.target, allowActiveFallback: false });
         if (!sendResult.ok) {
             log.error(`[heartbeat:${job["name"]}] send failed: ${sendResult.error}`);
         }
@@ -570,8 +737,8 @@ export async function runHeartbeatJob(job: Record<string, any>) {
             try {
                 insertHeartbeatAnchor.run(
                     job["id"], job["name"], settings["workingDir"],
-                    binding.state === 'bound' ? binding.target.channel : 'active',
-                    binding.state === 'bound' ? binding.target.targetId : null,
+                    destinationBinding.target.channel,
+                    destinationBinding.target.targetId,
                     job["prompt"], decision.delivered ? formatted : `[quiet] ${formatted}`, now, decision.delivered ? now : null,
                 );
             } catch (e) {

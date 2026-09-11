@@ -181,6 +181,9 @@ export type SlackHistoryOpts = {
      * window can be applied.
      */
     noRetryOnRateLimit?: boolean;
+    /** Do not retry any Slack error. Scheduled destination verification owns a
+     * future tick and must not spend a second shared API call in this one. */
+    noRetry?: boolean;
     sensitiveResponse?: boolean;
 };
 
@@ -228,7 +231,7 @@ async function callWithRetry(
     // A 429 is retried by default (existing callers depend on it), but an
     // enrichment caller opts out: it applies its own suppression window, and a
     // retry would fire a second request before that window exists.
-    const retryable = isRetryableSlackError(result.error)
+    const retryable = opts.noRetry !== true && isRetryableSlackError(result.error)
         && !(opts.noRetryOnRateLimit && result.error === 'ratelimited');
     if (!result.ok && retryable && !opts.signal?.aborted) {
         // One bounded retry after a short pause (Hermes uses 1s/2s; a single

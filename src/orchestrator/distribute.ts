@@ -19,6 +19,7 @@ import {
     updateWorkerPhase,
 } from './worker-registry.js';
 import { sanitizeToolLogForDurableStorage } from '../shared/tool-log-sanitize.js';
+import { isRemoteTarget } from '../messaging/types.js';
 
 // ─── Phase Constants (shared with pipeline.ts) ───────
 
@@ -414,6 +415,7 @@ ${worklogBlock}`.trim();
         ...(typeof meta["scopeKey"] === 'string' ? { scopeKey: meta["scopeKey"] } : {}),
         ...(typeof meta["chatSessionId"] === 'string' ? { chatSessionId: meta["chatSessionId"] } : {}),
         ...(typeof meta["requestId"] === 'string' ? { requestId: meta["requestId"] } : {}),
+        ...(isRemoteTarget(meta["target"]) ? { target: { ...meta["target"] } } : {}),
         ...(assignmentPermissions !== undefined ? { permissions: assignmentPermissions } : {}),
         env: {
             JAW_EMPLOYEE_MODE: '1',

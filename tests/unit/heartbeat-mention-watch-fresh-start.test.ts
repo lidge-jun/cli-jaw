@@ -12,7 +12,12 @@ import { registerHeartbeatRoutes } from '../../src/routes/heartbeat.ts';
 import { loadHeartbeatFile, saveHeartbeatFile, settings } from '../../src/core/config.ts';
 import { legacyMentionWatchV1Fixture, commitLegacyFreshStart } from '../../src/core/db.ts';
 import { detectLegacyMentionWatch, isQuarantined, quarantineState } from '../../src/memory/legacy-mention-watch-quarantine.ts';
-import { startHeartbeat, stopHeartbeat, getHeartbeatRuntimeState } from '../../src/memory/heartbeat.ts';
+import {
+    startHeartbeat,
+    stopHeartbeat,
+    getHeartbeatRuntimeState,
+    updateHeartbeatLiveDestinationHold,
+} from '../../src/memory/heartbeat.ts';
 import { resetVerifiedSlackWorkspace } from '../../src/slack/verified-workspace.ts';
 
 /** Present in the v1 table, which is what a losing claim must not have erased. */
@@ -436,6 +441,30 @@ test('a job with no hold carries no held marker', async () => {
         const body = await response.json() as { jobs?: Array<{ id?: string; held?: string }> };
         assert.equal(body.jobs?.find(candidate => candidate.id === jobId)?.held, undefined);
     });
+});
+
+test('GET surfaces a live thread hold while leaving the recovery timer intent enabled', async () => {
+    const job = {
+        id: 'live_thread_hold',
+        name: 'live_thread_hold',
+        enabled: true,
+        schedule: { kind: 'every' as const, minutes: 10 },
+        prompt: 'x',
+        destination: { channel: 'slack' as const, targetId: 'C_REPORTS', threadId: '1787616871.254919' },
+    };
+    saveHeartbeatFile({ jobs: [job] });
+    updateHeartbeatLiveDestinationHold(job, 'stale_thread');
+    try {
+        await withHeartbeatServer(async baseUrl => {
+            const response = await fetch(baseUrl + '/api/heartbeat');
+            const body = await response.json() as { jobs?: Array<{ id?: string; enabled?: boolean; held?: string }> };
+            const listed = body.jobs?.find(candidate => candidate.id === job.id);
+            assert.equal(listed?.enabled, true, 'file intent stays enabled so the next tick can recover');
+            assert.equal(listed?.held, 'stale_thread', 'operator UI sees why this tick cannot run');
+        });
+    } finally {
+        updateHeartbeatLiveDestinationHold(job, null);
+    }
 });
 
 test('clearing the hold clears the marker', async () => {

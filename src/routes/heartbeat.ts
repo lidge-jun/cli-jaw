@@ -2,7 +2,7 @@ import type { Express } from 'express';
 import type { AuthMiddleware } from './types.js';
 import { loadHeartbeatFile, saveHeartbeatFile, isHeartbeatDestination, isHeartbeatMentionWatch, settings } from '../core/config.js';
 import type { HeartbeatDestination, HeartbeatMentionWatch, HeartbeatJob } from '../core/config.js';
-import { startHeartbeat } from '../memory/heartbeat.js';
+import { getHeartbeatLiveDestinationHold, startHeartbeat } from '../memory/heartbeat.js';
 import { isCompleteHeartbeatDestination, resolveHeartbeatBinding } from '../memory/heartbeat-destination.js';
 import { validateHeartbeatScheduleInput } from '../memory/heartbeat-schedule.js';
 import { approveLegacyFreshStart, quarantineState, detectLegacyMentionWatch, isQuarantined } from '../memory/legacy-mention-watch-quarantine.js';
@@ -50,7 +50,9 @@ export function resolveHeartbeatDestination(
 function heldForDestination(job: HeartbeatJob): (HeartbeatJob & { held: string }) | null {
     if (job.mentionWatch) return null;
     const binding = resolveHeartbeatBinding(job.destination);
-    return binding.state === 'held' ? { ...job, held: binding.reason } : null;
+    if (binding.state === 'held') return { ...job, held: binding.reason };
+    const live = getHeartbeatLiveDestinationHold(job);
+    return live ? { ...job, held: live } : null;
 }
 
 /** Resolve the mention-watch a PUT should persist.

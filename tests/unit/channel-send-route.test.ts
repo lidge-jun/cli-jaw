@@ -331,8 +331,10 @@ test('full-local send: all four aliases lift explicit dest/root and refuse missi
         tgCalls.push(chatId);
         return { ok: true, message_id: 1 };
     }) as typeof tg.api.sendMessage;
-    const seen: Array<{ route?: string; channel?: string; targetId?: string; filePath?: string }> = [];
-    registerSendTransport('slack', async req => { seen.push({ channel: 'slack', targetId: req.target?.targetId, filePath: req.filePath }); return { ok: true }; });
+    const seen: Array<{ route?: string; channel?: string; targetId?: string; threadId?: string; filePath?: string }> = [];
+    registerSendTransport('slack', async req => { seen.push({
+        channel: 'slack', targetId: req.target?.targetId, threadId: req.target?.threadId, filePath: req.filePath,
+    }); return { ok: true }; });
     registerSendTransport('discord', async req => { seen.push({ channel: 'discord', targetId: req.target?.targetId, filePath: req.filePath }); return { ok: true }; });
     registerSendTransport('telegram', async req => { seen.push({ channel: 'telegram', targetId: req.target?.targetId, filePath: req.filePath }); return { ok: true }; });
     setLastActiveTarget('slack', { channel: 'slack', targetKind: 'channel', peerKind: 'channel', targetId: 'CLAST' });
@@ -431,6 +433,47 @@ test('full-local send: all four aliases lift explicit dest/root and refuse missi
         }, { 'x-jaw-slack-grant': secret });
         assert.equal(grantPlus.status, 200, JSON.stringify(grantPlus.body));
         assert.equal(seen.at(-1)?.targetId, 'CUNLISTED');
+
+        const scheduledDest = {
+            channel: 'slack' as const,
+            targetKind: 'channel' as const,
+            peerKind: 'channel' as const,
+            targetId: 'CHEARTBEAT',
+            threadId: '2.0',
+        };
+        assert.ok(reserveSlackToolGrant({
+            teamId: 'T1',
+            actorId: 'U1',
+            destination: scheduledDest,
+            credentialKey: slackCredentialKey('xoxb-full-send'),
+            enforceDestination: true,
+        }, { requestId: 'heartbeat-grant', scope: 'heartbeat', chatSessionId: 'default' }));
+        const scheduledSecret = activateSlackToolGrant('heartbeat-grant', 'heartbeat', 'default')!;
+
+        seen.length = 0;
+        const concurrentInteractive = await json('/api/channel/send', {
+            channel: 'slack', type: 'text', text: 'interactive',
+            target: { ...scheduledDest, targetId: 'COTHER' },
+        });
+        assert.equal(concurrentInteractive.status, 200, JSON.stringify(concurrentInteractive.body));
+        assert.equal(seen.at(-1)?.targetId, 'COTHER',
+            'a scheduled reservation must not process-globally lock an unrelated Auto caller');
+
+        seen.length = 0;
+        const scheduledOmit = await json('/api/channel/send', {
+            channel: 'slack', type: 'text', text: 'scheduled',
+        }, { 'x-jaw-slack-grant': scheduledSecret });
+        assert.equal(scheduledOmit.status, 200, JSON.stringify(scheduledOmit.body));
+        assert.equal(seen.at(-1)?.targetId, scheduledDest.targetId);
+        assert.equal(seen.at(-1)?.threadId, scheduledDest.threadId,
+            'server-owned grant supplies its destination even under full-local Auto');
+
+        const scheduledWrong = await json('/api/channel/send', {
+            channel: 'slack', type: 'text', text: 'wrong',
+            target: { ...scheduledDest, targetId: 'DOTHER' },
+        }, { 'x-jaw-slack-grant': scheduledSecret });
+        assert.equal(scheduledWrong.status, 403);
+        assert.equal(scheduledWrong.body.code, 'slack_destination_mismatch');
     }, { isFullAccess: () => true });
 
     await withMessagingServer(async baseUrl => {

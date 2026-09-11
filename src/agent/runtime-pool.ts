@@ -69,6 +69,7 @@ export interface PiAcquireOptions {
         profileFp: string;
     };
     piSettings: unknown;
+    env?: NodeJS.ProcessEnv;
     storedSessionId?: string | null;
     instructions?: string;
     forceNew?: boolean;
@@ -516,6 +517,7 @@ async function createPiEntry(
             model: opts.key.model,
             effort: opts.key.effort,
             cwd: opts.key.cwd,
+            ...(opts.env ? { env: opts.env } : {}),
             ...(opts.forceNew || !opts.storedSessionId ? {} : { sessionId: opts.storedSessionId }),
         });
         if (store.entries.get(key) !== creating) {
