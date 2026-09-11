@@ -1043,6 +1043,7 @@ export function spawnPiRpc(profile: PiProfile, pi: PiSettings, options: {
     onEvent?: (event: PiRuntimeEvent) => void;
     onRawRecord?: (record: unknown) => void;
     root?: string;
+    env?: NodeJS.ProcessEnv;
 }): { child: ChildProcess; done: Promise<PiPromptResult & { code: number; sessionId?: string | null }>;
     cleanup: Promise<PiExecutionCleanupReceipt> } {
     const effort = options.effort;

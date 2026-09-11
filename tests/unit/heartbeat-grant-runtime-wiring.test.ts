@@ -33,6 +33,8 @@ test('HGR-002 native pools cannot reuse a process carrying a scheduled grant', (
 test('HGR-003 Pi launches from the captured env instead of process-global env', () => {
     assert.ok(pi.includes('const inherited = { ...(options.env ?? process.env) }'));
     assert.ok(spawn.includes('piSettings: pi,\n            env: spawnEnv,'));
+    assert.ok((spawn.match(/env: spawnEnv/g) ?? []).length >= 2,
+        'both employee spawnPiRpc and main acquirePiRuntime receive the captured env');
 });
 
 test('HGR-004 employee and script runners receive the same request grant', () => {

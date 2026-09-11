@@ -2760,7 +2760,7 @@ export function spawnAgent(prompt: string, opts: SpawnOpts = {}): SpawnResult {
                 execution = spawnPiRpc(profile, pi, {
                     prompt: piPrompt, model: runtimeModel,
                     ...(piSessionId ? { sessionId: piSessionId } : {}),
-                    effort, cwd: spawnCwd, sysPrompt: piSysPrompt,
+                    effort, cwd: spawnCwd, sysPrompt: piSysPrompt, env: spawnEnv,
                     onEvent: onPiEvent, onRawRecord: onPiRawRecord,
                 });
             } catch (error) {
