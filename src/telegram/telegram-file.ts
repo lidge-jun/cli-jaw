@@ -5,6 +5,10 @@ import { log } from '../core/logger.js';
 import { redactOutboundText, logErrorText, userErrorText } from '../messaging/redact.js';
 import { abortableDelay } from '../messaging/outbound-lifecycle.js';
 import { deliveryFailed, deliverySent, type LiveDeliveryFields } from '../messaging/delivery-outcome.js';
+import { classifySendFailure, retryAfterMs as vendorRetryAfterMs } from '../messaging/retry.js';
+import {
+    FILE_UNCONFIRMED_STATUS, TELEGRAM_FILE_UNCONFIRMED, type FileConfirmation,
+} from '../messaging/file-receipt.js';
 
 interface TelegramApiErrorLike {
     error_code?: number;
@@ -74,7 +78,9 @@ function isTransient(err: unknown): boolean {
 }
 
 function getRetryAfterMs(err: unknown): number {
-    return (asTgErr(err).parameters?.retry_after ?? 0) * 1000;
+    // Delegates to the shared reader so the file path honours the same hints
+    // the text path does.
+    return vendorRetryAfterMs(err);
 }
 
 /** Determine upstream error category for HTTP response code. */
@@ -98,8 +104,13 @@ export async function sendTelegramFile(
     filePath: string,
     type: string,
     opts?: { caption?: string; threadId?: number; signal?: AbortSignal },
-): Promise<{ ok: boolean; attempts: number; error?: string; retryAfter?: number; statusCode?: number }
-    & Partial<LiveDeliveryFields>> {
+): Promise<{
+    ok: boolean; attempts: number; error?: string; retryAfter?: number; statusCode?: number;
+    /** Present once a send was actually attempted. Absent on a local refusal
+     *  (missing file, size limit), which delivered nothing and is not
+     *  "unconfirmed" in any useful sense. */
+    confirmation?: FileConfirmation;
+} & Partial<LiveDeliveryFields>> {
     // Validate here, not at the call sites. The Hub's outbound relay calls this
     // transport directly and skipped the check, which is how an empty document
     // still reached the API after the guard was added.
@@ -137,14 +148,42 @@ export async function sendTelegramFile(
                 default:
                     return { ok: false, attempts: attempt, error: `unsupported type: ${type}`, statusCode: 400, ...deliveryFailed(null) };
             }
+            // A Message with no usable id is not a delivered file. Telegram
+            // documents message_id 0 as an ephemeral or server-scheduled
+            // message that "will be unusable until it is actually sent", so a
+            // zero is evidence AGAINST delivery rather than weak evidence for
+            // it — and the old `String(rawId)` recorded it as a real id.
+            //
+            // A positive message_id is sufficient on its own. The media file_id
+            // is a reuse handle, not proof this chat received anything, and
+            // requiring it as well would report a truncated Message as
+            // unconfirmed for a send that did land.
             const rawId = (sentMessage as { message_id?: unknown } | undefined)?.message_id;
-            return { ok: true, attempts: attempt,
-                ...deliverySent(typeof rawId === 'number' || typeof rawId === 'string' ? String(rawId) : null) };
+            const messageId = typeof rawId === 'number' && Number.isFinite(rawId) && rawId > 0 ? String(rawId)
+                : typeof rawId === 'string' && rawId.trim() && rawId.trim() !== '0' ? rawId.trim()
+                : null;
+            if (messageId === null) {
+                return {
+                    ok: false, attempts: attempt, confirmation: 'unconfirmed',
+                    error: TELEGRAM_FILE_UNCONFIRMED, statusCode: FILE_UNCONFIRMED_STATUS,
+                    ...deliveryFailed(null, { ambiguous: true }),
+                };
+            }
+            return { ok: true, attempts: attempt, confirmation: 'confirmed', ...deliverySent(messageId) };
         } catch (err: unknown) {
             const e = asTgErr(err);
-            const transient = isTransient(err);
+            // 429 is decided by the shared classifier so the file path and the
+            // text path (messaging/retry.ts) agree on what a rate limit is; it
+            // recognises statusCode/status 429 and a bare retry_after, which the
+            // local error_code check misses. Everything else — 5xx, HttpError,
+            // ETIMEDOUT/ECONNRESET/ECONNREFUSED/EPIPE — stays with isTransient,
+            // because the shared classifier folds those into 'ambiguous' and
+            // routing the retry decision through it would stop retrying them.
+            const rateLimited = classifySendFailure(err) === 'rate-limit';
+            const transient = isTransient(err) || rateLimited;
             if (!transient || attempt === MAX_RETRIES) {
-                const sc = transient ? classifyUpstreamError(err) : (e.error_code || e.statusCode || 500);
+                const sc = rateLimited ? 429
+                    : transient ? classifyUpstreamError(err) : (e.error_code || e.statusCode || 500);
                 log.error(`[telegram:file] failed after ${attempt} attempt(s):`, logErrorText(err));
                 return stripUndefined({
                     ok: false, attempts: attempt,
@@ -152,7 +191,7 @@ export async function sendTelegramFile(
                     // credential sink in its own right — grammY puts the Bot
                     // API URL, token and all, in some error messages.
                     error: userErrorText(err) || 'unknown error',
-                    retryAfter: e.error_code === 429 ? e.parameters?.retry_after : undefined,
+                    retryAfter: rateLimited ? e.parameters?.retry_after : undefined,
                     statusCode: sc,
                 });
             }

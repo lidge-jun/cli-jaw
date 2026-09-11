@@ -11,6 +11,9 @@ import { basename } from 'node:path';
 import type { RemoteTarget } from '../messaging/types.js';
 import { slackApi, describeSlackError, redactSlackTokens, type SlackFetch } from './api.js';
 import { redactOutboundText } from '../messaging/redact.js';
+import {
+    FILE_UNCONFIRMED_STATUS, SLACK_FILE_UNCONFIRMED, type FileConfirmation,
+} from '../messaging/file-receipt.js';
 
 // Slack's per-file ceiling is 1 GB, but a chat transport has no business
 // streaming that. 50 MiB matches the inbound attachment cap the Discord
@@ -40,6 +43,11 @@ export type SlackFileSendResult = {
     status?: number;
     grantedScopes?: string;
     retryAfterMs?: number;
+    /** The same top-level vocabulary the other two channels now speak. Slack's
+     *  behaviour is unchanged: what used to be a bare `ok: false` for a
+     *  completion with no `files[]` echo is still `ok: false`, and now also
+     *  says WHY in a word every channel shares. */
+    confirmation?: FileConfirmation;
 } & ({
     ok: true; sent: true;
     upload: SlackFileUploadReceipt & { stage: 'completion'; state: 'completed'; fileId: string };
@@ -141,8 +149,10 @@ export async function sendSlackFile(
     // reported as a delivered upload. Confirmation requires the reserved id back.
     if (!Array.isArray(files) || !files.length
         || !files.every(row => row && typeof row === 'object' && typeof row.id === 'string' && /^F[A-Z0-9]{1,100}$/.test(row.id))
-        || !files.some(row => row.id === fileId)) return failure('slack_file_completion_unconfirmed', 502, 'unknown');
+        || !files.some(row => row.id === fileId)) {
+        return { ...failure(SLACK_FILE_UNCONFIRMED, FILE_UNCONFIRMED_STATUS, 'unknown'), confirmation: 'unconfirmed' };
+    }
     const upload = { ...receipt('completed'), stage: 'completion' as const, state: 'completed' as const, fileId: reservedId };
     if (signal.aborted) return { ok: false, sent: true, retryable: false, upload, error: 'slack_send_aborted', status: 499 };
-    return { ok: true, sent: true, retryable: false, upload };
+    return { ok: true, sent: true, retryable: false, upload, confirmation: 'confirmed' };
 }

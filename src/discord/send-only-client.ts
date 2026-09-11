@@ -10,10 +10,14 @@ import {
 } from './rest-scheduler.js';
 import {
     discordDeliveryError,
+    deliveryFailed,
     deliverySent,
     type DeliveryFailure,
     type LiveDeliveryFields,
 } from '../messaging/delivery-outcome.js';
+import {
+    DISCORD_FILE_UNCONFIRMED, FILE_UNCONFIRMED_STATUS, type FileConfirmation,
+} from '../messaging/file-receipt.js';
 
 export type DiscordSendClientResult =
     | { token: string; reason?: never; status?: never }
@@ -39,8 +43,9 @@ export function getDiscordSendClient(): DiscordSendClientResult {
 }
 
 export type DiscordRestSendResult =
-    | ({ ok: true; failure?: never; error?: never; status?: never } & LiveDeliveryFields)
-    | { ok: false; failure: DeliveryFailure; error: string; status?: number };
+    | ({ ok: true; failure?: never; error?: never; status?: never; confirmation?: FileConfirmation } & LiveDeliveryFields)
+    | ({ ok: false; failure: DeliveryFailure; error: string; status?: number; confirmation?: FileConfirmation }
+        & Partial<LiveDeliveryFields>);
 
 /** Discord answers a message POST with the created message as JSON. The id was
  *  being thrown away by a parse that returned undefined, so nothing downstream
@@ -212,7 +217,27 @@ export async function sendDiscordFileRest(
             },
             parse: parseDiscordMessageId,
         });
-        return sendResult(result);
+        // The scheduler's leniency is right for the endpoints it shares: 204 IS
+        // the documented success for reactions, deletes and unpin. It is not
+        // documented for Create Message, which returns the created message
+        // object — so an empty or unreadable body here means something other
+        // than Discord answered, the same threat Slack refuses. Decide that
+        // HERE rather than in the scheduler or in the shared `sendResult`,
+        // both of which also carry Discord text sends.
+        if (result.ok && typeof result.value !== 'string') {
+            return {
+                ok: false, confirmation: 'unconfirmed',
+                failure: {
+                    kind: 'ambiguous', retryAfterMs: 0,
+                    code: DISCORD_FILE_UNCONFIRMED, message: DISCORD_FILE_UNCONFIRMED,
+                },
+                error: DISCORD_FILE_UNCONFIRMED,
+                status: FILE_UNCONFIRMED_STATUS,
+                ...deliveryFailed(null, { ambiguous: true }),
+            };
+        }
+        const sent = sendResult(result);
+        return sent.ok ? { ...sent, confirmation: 'confirmed' } : sent;
     } catch (error) {
         const statusCode = (error as { statusCode?: number }).statusCode;
         const failure = discordDeliveryError({
