@@ -2,7 +2,7 @@ import fs from 'fs';
 import os from 'os';
 import { createHash } from 'crypto';
 import { join } from 'path';
-import { settings, JAW_HOME, PROMPTS_DIR, SKILLS_DIR, SKILLS_REF_DIR, loadHeartbeatFile, deriveCdpPort, DEFAULT_PORT } from '../core/config.js';
+import { settings, JAW_HOME, PROMPTS_DIR, SKILLS_DIR, SKILLS_REF_DIR, loadHeartbeatFile, deriveCdpPort, DEFAULT_PORT, resolveFlushEvery } from '../core/config.js';
 import { expandHomePath } from '../core/path-expand.js';
 import { stripUndefined } from '../core/strip-undefined.js';
 import { resolveSkillId } from '../../lib/mcp/skills-aliases.js';
@@ -640,7 +640,7 @@ export function loadRecentMemories() {
 function appendLegacyMemoryContext(prompt: string) {
     let next = prompt;
     try {
-        const threshold = settings["memory"]?.flushEvery ?? 10;
+        const threshold = resolveFlushEvery();
         const injectInterval = Math.ceil(threshold / 2);
         // Phase 53-A: Always inject memory in the first 3 turns of a session
         // so short conversations never miss context.

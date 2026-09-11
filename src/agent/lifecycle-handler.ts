@@ -4,7 +4,7 @@ import { revokeSlackToolGrant } from '../slack/tool-context.js';
 
 import type { ChildProcess } from 'child_process';
 import { broadcast } from '../core/bus.js';
-import { settings, detectCli } from '../core/config.js';
+import { settings, detectCli, resolveFlushEvery } from '../core/config.js';
 import { clearEmployeeSession, insertMessage, insertMessageWithTrace, insertMessageWithTraceRun, updateSession, clearSessionBucket, markAnchorConsumed, updateSessionBucketLastRun } from '../core/db.js';
 import { getActiveChatSession } from '../core/chat-sessions.js';
 import { persistMainSession, type SessionOwnerToken } from './session-persistence.js';
@@ -722,7 +722,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
                     catch { console.warn('[runtime] heartbeat anchor update failed'); }
                 }
                 incrementMemoryFlush();
-                const threshold = settings['memory']?.flushEvery ?? 10;
+                const threshold = resolveFlushEvery();
                 if (settings['memory']?.enabled !== false && countTurnForFlush(threshold)) {
                     void triggerMemoryFlush();
                 }
@@ -833,7 +833,7 @@ export async function handleAgentExit(params: ExitHandlerParams): Promise<void> 
             // the TARGET is global now, not because the trigger is per session — when
             // everyone is summarised together, who spent the counter stops mattering.
             incrementMemoryFlush();
-            const threshold = settings["memory"]?.flushEvery ?? 10;
+            const threshold = resolveFlushEvery();
             if (settings["memory"]?.enabled !== false && countTurnForFlush(threshold)) {
                 // The outcome needs no handling: an insufficient cycle is spent by policy,
                 // and a locked one has already queued its own retry.

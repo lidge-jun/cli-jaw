@@ -5,7 +5,7 @@ import fs from 'fs';
 import { join } from 'path';
 import { ok, fail } from '../http/response.js';
 import { getMemory, upsertMemory, deleteMemory } from '../core/db.js';
-import { settings, saveSettings, JAW_HOME } from '../core/config.js';
+import { settings, saveSettings, JAW_HOME, resolveFlushEvery, resolveMemoryRetentionDays } from '../core/config.js';
 import * as memoryModule from '../memory/memory.js';
 import { bootstrapMemory, getMemoryStatus, getLastReflectedAt, hasSoulFile, loadSoulSummary, listMemoryFiles, reindexMemory, syncKvShadowImport } from '../memory/runtime.js';
 import { getFlushStatus } from '../agent/memory-flush-controller.js';
@@ -116,10 +116,10 @@ export function registerMemoryRoutes(app: Express, requireAuth: AuthMiddleware):
             });
         res.json({
             enabled: settings["memory"]?.enabled !== false,
-            flushEvery: settings["memory"]?.flushEvery ?? 10,
+            flushEvery: resolveFlushEvery(),
             cli: settings["memory"]?.cli || '',
             model: settings["memory"]?.model || '',
-            retentionDays: settings["memory"]?.retentionDays ?? 30,
+            retentionDays: resolveMemoryRetentionDays(),
             flushLanguage: settings["memory"]?.flushLanguage || 'en',
             path: memDir, files,
             counter: memoryFlushCounter,
