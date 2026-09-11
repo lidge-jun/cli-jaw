@@ -51,13 +51,14 @@ test('a Discord send carries the platform message id instead of discarding it', 
     assert.equal(result.ambiguous, false);
 });
 
-test('a Discord send that returns no readable body stays sent but ambiguous', async () => {
-    // A 204 or an unparseable body still means the message was posted. Turning
-    // that into a transport failure would invent an error out of a success.
+test('a Discord send with an unreadable body stays sent but ambiguous', async () => {
+    // An empty or non-JSON body still means the message was posted. Turning that
+    // into a transport failure would invent an error out of a success, so the
+    // parse swallows it and reports an unknown id instead.
     const fetchImpl = (async (url: string | URL | Request) => {
         const isOpen = String(url).endsWith('/users/@me/channels');
         if (isOpen) return new Response(JSON.stringify({ id: 'DM123' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
-        return new Response('', { status: 204 });
+        return new Response('<<not json>>', { status: 200, headers: { 'Content-Type': 'text/plain' } });
     }) as typeof fetch;
     const result = await sendDiscordDm('token', 'USER9', 'digest payload', fetchImpl);
     assert.equal(result.ok, true);
