@@ -257,6 +257,47 @@ PTY 도구는 설치된 Node/tsx/xterm과 Python 3 POSIX 표준 라이브러리�
 파괴적 신호를 보내지 않으며, 소유권이 불분명하면 실패와 임시 루트 보존으로 끝난다.
 이 보존을 무효화하는 상위 임시 디렉터리 자동 삭제 wrapper로 감싸지 않는다.
 
+#### 새 워크트리의 네이티브 바이너리가 Windows Application Control 에 막힌다
+
+증상은 테스트 하네스 버그처럼 보인다. `npm ci` 직후 하트비트 스위트를 돌리면 18 개 중
+11 개가 **파일 단위로** `tests/unit/X.test.ts:1:1` 에서 실패하는데, 각 파일 안의 개별
+케이스는 전부 통과한 것으로 찍힌다. DB 를 건드리는 파일만 골라서 실패하므로 위의
+프로세스 격리 이야기와 엮어 읽기 쉽다 — 그건 원인이 아니다.
+
+실제 원인은 import 단계에서 죽는 것이다:
+
+```
+Error: An Application Control policy has blocked this file.
+...\node_modules\better-sqlite3\prebuilds\win32-x64.node
+    at getBinding (node_modules/better-sqlite3/lib/binding.js:30)
+    at new Database (node_modules/better-sqlite3/lib/database.js:46)
+    at <anonymous> (src/core/db.ts:29)
+```
+
+진단할 때 두 가지 함정이 있다.
+
+- `require('better-sqlite3')` 는 이 오류를 내지 않는다. `getBinding` 은 `Database`
+  생성자 안에서 돌기 때문에, 차단된 바이너리에서도 bare require 는 성공한다. 확인하려면
+  반드시 `new Database(':memory:')` 까지 해야 한다.
+- 한 체크아웃에 둔 프로브 스크립트를 다른 체크아웃의 cwd 에서 실행하면, Node 는 cwd 가
+  아니라 **스크립트 위치** 기준으로 모듈을 찾는다. 세 체크아웃이 전부 같은 파일을 로드해
+  똑같이 고장난 것처럼 보인다. 프로브는 체크아웃마다 절대 경로로 require 할 것.
+
+차단은 내용이나 버전이 아니라 **경로** 기준이다. 같은 `better-sqlite3` 13.0.2 가 오래된
+체크아웃에서는 로드되고, 그 바이너리를 새 워크트리로 바이트 단위 복사해도 여전히 거부된다.
+`Unblock-File` 도 듣지 않는다 (Zone.Identifier 스트림이 애초에 없다).
+
+우회는 허용된 경로를 제자리에 끼워 넣는 것이다. 추적 파일은 건드리지 않으며
+`node_modules` 는 gitignore 대상이라 `npm ci` 로 원복된다:
+
+```powershell
+Rename-Item node_modules\better-sqlite3\prebuilds prebuilds.blocked-by-appcontrol
+New-Item -ItemType Junction -Path node_modules\better-sqlite3\prebuilds -Target <허용된-체크아웃>\node_modules\better-sqlite3\prebuilds
+```
+
+패키지 디렉터리를 `Remove-Item -Recurse` 로 지우고 다시 만들려 하지 말 것. 관리형
+워크트리 안의 경로라 가드가 막고, 애초에 삭제가 필요 없다.
+
 ### 실행 모드
 
 | 모드 | 명령/엔트리 | 실제 동작 |
