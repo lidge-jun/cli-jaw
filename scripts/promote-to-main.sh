@@ -19,11 +19,62 @@ fi
 
 PREVIEW_VERSION="$(git show "$PREVIEW_SHA:package.json" \
   | node -e 'const fs=require("node:fs"); process.stdout.write(JSON.parse(fs.readFileSync(0,"utf8")).version)')"
-if [[ ! "$PREVIEW_VERSION" =~ ^([0-9]+\.[0-9]+\.[0-9]+)-preview\.[0-9]+$ ]]; then
-  echo "ERROR: preview version must match X.Y.Z-preview.TIMESTAMP; got $PREVIEW_VERSION" >&2
-  exit 1
+
+# The version alone cannot decide what to do here. This script writes to the
+# remote in the middle of its own run: it lease-pushes preview to the stable bump
+# and only then waits for CI before touching main. When that wait gave up,
+# preview already carried X.Y.Z while main sat at its parent, and a re-run was
+# refused by the prerelease check that used to live on this line, so the release
+# was finished by hand. Loosening that check alone would be worse: the run would
+# fall into npm version --allow-same-version below and lease-push a SECOND commit
+# for a version CI had already certified. Classify the situation instead; the
+# rules and their fixtures live in scripts/promotion-state.mjs.
+MAIN_IS_ANCESTOR=false
+if git merge-base --is-ancestor refs/remotes/origin/main "$PREVIEW_SHA" 2>/dev/null; then
+  MAIN_IS_ANCESTOR=true
 fi
-STABLE_VERSION="${BASH_REMATCH[1]}"
+PREVIEW_PARENT_VERSION="$(git show "$PREVIEW_SHA^:package.json" 2>/dev/null \
+  | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).version)}catch{process.stdout.write("")}})' || true)"
+PREVIEW_SUBJECT="$(git log -1 --format=%s "$PREVIEW_SHA")"
+PREVIEW_DIFF="$(git diff --name-only "$PREVIEW_SHA^" "$PREVIEW_SHA" 2>/dev/null || true)"
+MAIN_HEAD_SHA="$(git rev-parse refs/remotes/origin/main^{commit})"
+PROMOTION_STATE_LINE="$(
+  node -e '
+    // node -e puts the FIRST user argument at argv[1]; there is no script path
+    // to skip, so slicing at 2 silently drops previewVersion and hands the SHA
+    // to the classifier as a version.
+    const v = process.argv.slice(1);
+    process.stdout.write(JSON.stringify({
+      previewVersion: v[0], previewSha: v[1], mainSha: v[2],
+      mainIsAncestor: v[3] === "true", parentVersion: v[4], previewSubject: v[5],
+      changedFiles: v[6] ? v[6].split(String.fromCharCode(10)).filter(Boolean) : [],
+    }));
+  ' \
+    "$PREVIEW_VERSION" "$PREVIEW_SHA" "$MAIN_HEAD_SHA" \
+    "$MAIN_IS_ANCESTOR" "$PREVIEW_PARENT_VERSION" "$PREVIEW_SUBJECT" "$PREVIEW_DIFF" \
+  | node scripts/promotion-state.mjs
+)"
+PROMOTION_STATE="${PROMOTION_STATE_LINE%% *}"
+STABLE_VERSION="$(echo "$PROMOTION_STATE_LINE" | awk '{print $2}')"
+RESUME=false
+case "$PROMOTION_STATE" in
+  prerelease)
+    ;;
+  resume)
+    # preview already holds the bump this script writes and main has not taken
+    # it. Skip the mint and the lease push; run the certification tail only.
+    RESUME=true
+    echo "NOTE: resuming an unfinished promotion of v$STABLE_VERSION at $PREVIEW_SHA" >&2
+    ;;
+  already_on_main)
+    echo "Nothing to do: main and preview are both v$STABLE_VERSION at $PREVIEW_SHA." >&2
+    exit 0
+    ;;
+  *)
+    echo "ERROR: ${PROMOTION_STATE_LINE#* }" >&2
+    exit 1
+    ;;
+esac
 
 TESTS_URL="$(gh run list \
   --workflow test.yml \
@@ -66,63 +117,96 @@ cleanup() {
   exit "$status"
 }
 trap cleanup EXIT
-prepare_promotion_checkout "$REMOTE_URL" "$PREVIEW_SHA" preview "$WORKTREE"
+if [ "$RESUME" = true ]; then
+  # Resume takes the commit preview already holds. Minting again would produce a
+  # second commit for the same version, and lease-pushing it would replace a tree
+  # CI had already certified, so neither the bump nor the preview push happens on
+  # this path. The clone exists only so the main push below has the object: a push
+  # from this repository would fail with "fatal: bad object".
+  PROMOTION_COMMIT="$PREVIEW_SHA"
+  git clone --quiet --no-checkout "$REMOTE_URL" "$WORKTREE"
+  git -C "$WORKTREE" fetch --quiet origin "$PROMOTION_COMMIT"
+  echo "resuming at the commit preview already carries: $PROMOTION_COMMIT"
+else
+  prepare_promotion_checkout "$REMOTE_URL" "$PREVIEW_SHA" preview "$WORKTREE"
 
-(
-  cd "$WORKTREE"
-  npm ci --ignore-scripts
-  npm version "$STABLE_VERSION" --no-git-tag-version --allow-same-version
-  node scripts/sync-electron-version.cjs
-  npm run gate:all
-  node scripts/require-release-evidence.mjs --accept-ci-evidence
-  git add package.json package-lock.json electron/package.json electron/package-lock.json
-  git commit -m "chore: promote v$STABLE_VERSION"
-  assert_promotion_checkout_ready_to_push "$WORKTREE" "$PREVIEW_SHA" preview
-)
-PROMOTION_COMMIT="$(git -C "$WORKTREE" rev-parse HEAD)"
+  (
+    cd "$WORKTREE"
+    npm ci --ignore-scripts
+    npm version "$STABLE_VERSION" --no-git-tag-version --allow-same-version
+    node scripts/sync-electron-version.cjs
+    npm run gate:all
+    node scripts/require-release-evidence.mjs --accept-ci-evidence
+    git add package.json package-lock.json electron/package.json electron/package-lock.json
+    git commit -m "chore: promote v$STABLE_VERSION"
+    assert_promotion_checkout_ready_to_push "$WORKTREE" "$PREVIEW_SHA" preview
+  )
+  PROMOTION_COMMIT="$(git -C "$WORKTREE" rev-parse HEAD)"
 
-# Fast-forward preview first. preview is where the release CI that publish.yml
-# gates on actually runs, so the bump has to be certified there before main can
-# take it. --force-with-lease pins the push to the SHA this run certified: if
-# preview moved while the gates ran, the push is refused instead of silently
-# discarding whatever landed.
-#
-# Every push here runs from the promotion checkout. The promotion commit exists
-# only in that clone, so pushing from the main repository fails with
-# "fatal: bad object" -- the object it is asked to send was never written here.
-git -C "$WORKTREE" push --force-with-lease="refs/heads/preview:$PREVIEW_SHA" \
-  origin "$PROMOTION_COMMIT:refs/heads/preview"
-echo "preview fast-forwarded to the promotion commit: $PROMOTION_COMMIT"
+  # Fast-forward preview first. preview is where the release CI that publish.yml
+  # gates on actually runs, so the bump has to be certified there before main can
+  # take it. --force-with-lease pins the push to the SHA this run certified: if
+  # preview moved while the gates ran, the push is refused instead of silently
+  # discarding whatever landed.
+  #
+  # Every push here runs from the promotion checkout. The promotion commit exists
+  # only in that clone, so pushing from the main repository fails with
+  # "fatal: bad object" -- the object it is asked to send was never written here.
+  git -C "$WORKTREE" push --force-with-lease="refs/heads/preview:$PREVIEW_SHA" \
+    origin "$PROMOTION_COMMIT:refs/heads/preview"
+  echo "preview fast-forwarded to the promotion commit: $PROMOTION_COMMIT"
+fi
 
 wait_for_run() {
-  local workflow="$1" label="$2" branch="$3" sha="$4" url="" failed=""
-  local deadline=$((SECONDS + 1200))
-  while [ "$SECONDS" -lt "$deadline" ]; do
+  # $5 is the event filter. Tests must stay push-only: publish.yml accepts a
+  # certifying Tests run only from a preview/main push, so waiting on any other
+  # event here would wait for evidence the gate then rejects. The platform
+  # workflow is the opposite: publish.yml and require-release-evidence.mjs both
+  # look it up by commit with no event filter, so insisting on push here made a
+  # legal re-dispatch unable to finish a promotion it had already satisfied.
+  local workflow="$1" label="$2" branch="$3" sha="$4" event="${5:-push}"
+  local url="" states="" live="" failed=""
+  local -a event_filter=()
+  [ -n "$event" ] && event_filter=(--event "$event")
+
+  # The budget bounds DISCOVERY, not execution. It used to bound both at 1200s,
+  # which is shorter than the 1500s the windows-wsl job alone is allowed, so a
+  # slow-but-legal platform run could exhaust it while still running. Once a run
+  # for this SHA exists, it carries its own timeout-minutes and that is the bound
+  # we respect; a run that never appears is what this deadline is for.
+  local discovery_deadline=$((SECONDS + 1200))
+  while :; do
     url="$(gh run list \
       --workflow "$workflow" \
       --branch "$branch" \
       --commit "$sha" \
-      --event push \
+      "${event_filter[@]}" \
       --status success \
       --limit 1 --json url --jq '.[0].url // ""')"
     [ -n "$url" ] && { echo "$label certified by: $url" >&2; return 0; }
-    failed="$(gh run list \
+
+    # One listing, newest first, so liveness and failure are judged against the
+    # same snapshot. Both workflows set cancel-in-progress, so a superseded run
+    # leaves a cancelled conclusion next to a live replacement; reading only the
+    # newest completed row called the SHA dead while it was still being tested.
+    states="$(gh run list \
       --workflow "$workflow" \
       --branch "$branch" \
       --commit "$sha" \
-      --event push \
-      --status completed \
-      --limit 1 --json conclusion --jq '.[0].conclusion // ""')"
-    case "$failed" in
-      failure|cancelled|timed_out|startup_failure|action_required)
-        echo "ERROR: $branch $label completed with $failed" >&2
-        return 1
-        ;;
-    esac
+      "${event_filter[@]}" \
+      --limit 20 --json status,conclusion --jq '.[] | "\(.status) \(.conclusion // "")"')"
+    live="$(printf '%s\n' "$states" | grep -c -E '^(queued|in_progress|waiting|requested|pending)' || true)"
+    failed="$(printf '%s\n' "$states" | grep -m1 -E '^completed (failure|cancelled|timed_out|startup_failure|action_required)$' || true)"
+    if [ -n "$failed" ] && [ "${live:-0}" -eq 0 ]; then
+      echo "ERROR: $branch $label completed with ${failed#completed }" >&2
+      return 1
+    fi
+    if [ "${live:-0}" -eq 0 ] && [ "$SECONDS" -ge "$discovery_deadline" ]; then
+      echo "ERROR: no $branch $label run appeared for $sha within 1200s" >&2
+      return 1
+    fi
     sleep 10
   done
-  echo "ERROR: timed out waiting for successful $branch $label" >&2
-  return 1
 }
 
 # postinstall-platform.yml carries paths: filters, so it never runs for a SHA
@@ -139,9 +223,23 @@ if [ -n "$PREVIOUS_TAG" ]; then
   [ "$DETECTOR_STATUS" -eq 1 ] && PLATFORM_REQUIRED=true
 fi
 
-wait_for_run test.yml "Tests" preview "$PROMOTION_COMMIT"
+# Printed on every path that gives up after preview already moved, so the
+# operator resumes instead of reconstructing the tail by hand. The script is
+# resumable now: re-running it classifies this exact state and skips the bump.
+promote_resume_hint() {
+  echo "" >&2
+  echo "preview already carries v$STABLE_VERSION at $PROMOTION_COMMIT; main was not moved." >&2
+  echo "Resume once the required runs are green (the bump is not repeated):" >&2
+  echo "  bash scripts/promote-to-main.sh" >&2
+}
+
+wait_for_run test.yml "Tests" preview "$PROMOTION_COMMIT" push || { promote_resume_hint; exit 1; }
 if [ "$PLATFORM_REQUIRED" = true ]; then
-  wait_for_run postinstall-platform.yml "Postinstall Platform Checks" preview "$PROMOTION_COMMIT"
+  # No event filter: publish.yml and require-release-evidence.mjs both accept any
+  # successful platform run for the commit, so promote must not be stricter than
+  # the gate it is feeding.
+  wait_for_run postinstall-platform.yml "Postinstall Platform Checks" preview "$PROMOTION_COMMIT" "" \
+    || { promote_resume_hint; exit 1; }
 fi
 
 # ─── Fast-forward main onto the certified commit ────────────────────────────

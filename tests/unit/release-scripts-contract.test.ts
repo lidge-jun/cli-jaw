@@ -182,6 +182,59 @@ test('stable promotion delegates checkout isolation and never auto-rewrites docs
     assert.ok(!script.includes('verify-counts.sh --fix'));
 });
 
+test('stable promotion resumes after preview already carries the stable bump', () => {
+    // Promoting v2.17.50 left preview at the stable bump and main at its parent:
+    // the certification wait gave up before the main push, and re-running was
+    // refused by the script's own prerelease check, so the release was finished by
+    // hand. The decision is a classifier with fixtures (promotion-state.test.ts);
+    // what this test owns is that the script actually routes through it and that
+    // resume cannot become a second bump.
+    const script = read('scripts/promote-to-main.sh');
+
+    assert.ok(
+        script.includes('node scripts/promotion-state.mjs'),
+        'promotion must classify the preview state instead of pattern-matching the version inline',
+    );
+    for (const state of ['prerelease', 'resume', 'already_on_main']) {
+        assert.ok(script.includes(state), `promotion must handle the ${state} state`);
+    }
+
+    // The bump and the preview push belong to the prerelease path only. On resume
+    // the commit already exists and CI has seen it; minting again would replace a
+    // certified tree with a same-version copy.
+    const resumeBranch = script.slice(script.indexOf('if [ "$RESUME" = true ]; then'), script.indexOf('else', script.indexOf('if [ "$RESUME" = true ]; then')));
+    assert.ok(resumeBranch.length > 0, 'promotion must carry an explicit resume branch');
+    assert.ok(!resumeBranch.includes('npm version'), 'resume must not re-mint the version bump');
+    assert.ok(!resumeBranch.includes('--force-with-lease'), 'resume must not re-push preview');
+
+    // Ordering is the safety property: certification still precedes the main ref
+    // update on every path, and main is still never forced.
+    assert.ok(
+        script.indexOf('wait_for_run test.yml') < script.indexOf('refs/heads/main'),
+        'the Tests wait must still precede the main push',
+    );
+    assert.ok(!/push[^\n]*--force[^-]/.test(script), 'the main push must never use --force');
+
+    // The wait budget used to be a 1200s wall clock covering execution, which is
+    // shorter than the 1500s the windows-wsl job alone may take. A run that exists
+    // must be waited on for its own lifetime.
+    const waiter = script.slice(script.indexOf('wait_for_run() {'), script.indexOf('promote_resume_hint'));
+    assert.ok(waiter.includes('discovery_deadline'), 'the deadline must bound discovery, not a running job');
+    assert.ok(
+        waiter.includes('queued|in_progress'),
+        'the waiter must keep polling while a run for this SHA is still live',
+    );
+    assert.ok(
+        /live.*-eq 0/s.test(waiter),
+        'a failed conclusion may only be terminal when no live run remains, because cancel-in-progress leaves cancelled rows beside replacements',
+    );
+
+    assert.ok(
+        script.includes('promote_resume_hint'),
+        'giving up after preview moved must tell the operator how to resume',
+    );
+});
+
 test('stable promotion cleans up its checkout without leaking a remote branch', () => {
     // The old promotion minted codex/promote-<version>-<sha12> on origin, so the
     // trap had to delete it on every abort between push and merge; five such
