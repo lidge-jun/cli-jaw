@@ -26,8 +26,17 @@ export type HeartbeatHoldReason =
     | 'live_lookup_failed'
     | 'slack_grant_unavailable';
 
+/** Whether the bound conversation was actually PROVEN to exist this tick.
+ *
+ *  Three states, not a boolean, because "no check exists for this shape" and "a
+ *  check failed" must not be the same word. A Discord target, a Telegram target and
+ *  a Slack `channel_root` have no live check to perform — reporting them as
+ *  unverified would make every healthy tick on those transports look like a failed
+ *  lookup, which is a new false signal rather than an honest one. */
+export type HeartbeatVerification = 'verified' | 'unverified' | 'unsupported';
+
 export type HeartbeatBinding =
-    | { state: 'bound'; target: RemoteTarget }
+    | { state: 'bound'; target: RemoteTarget; verification: HeartbeatVerification }
     | { state: 'held'; reason: HeartbeatHoldReason };
 
 /** True when a stored destination names a conversation precisely enough to send.
@@ -64,7 +73,10 @@ export function resolveHeartbeatBinding(destination: unknown): HeartbeatBinding 
     const dest = destination as HeartbeatDestination;
     const base = targetFromChatId(dest.channel, dest.targetId);
     const threadId = dest.threadId?.trim();
-    return { state: 'bound', target: threadId ? { ...base, threadId } : base };
+    // A pure parse proves the destination is well formed, never that the
+    // conversation still exists. Saying `unverified` here is what lets a caller
+    // tell this result from one that came back through the live check.
+    return { state: 'bound', target: threadId ? { ...base, threadId } : base, verification: 'unverified' };
 }
 
 /** Operator-facing explanation. Never includes tokens or report content. */
@@ -112,7 +124,10 @@ export async function verifyHeartbeatThreadBindingLive(
     const binding = resolveHeartbeatBinding(destination);
     if (binding.state === 'held') return binding;
     const { target } = binding;
-    if (target.channel !== 'slack' || !target.threadId) return binding;
+    // No live check exists for these shapes: only Slack has threads to read, and a
+    // `channel_root` job names the channel itself. `unsupported` says that, rather
+    // than leaving a healthy job looking unverified forever.
+    if (target.channel !== 'slack' || !target.threadId) return { ...binding, verification: 'unsupported' };
     if (!options.token.trim()) return { state: 'held', reason: 'live_lookup_failed' };
 
     try {
@@ -134,7 +149,7 @@ export async function verifyHeartbeatThreadBindingLive(
             return { state: 'held', reason: 'live_lookup_failed' };
         }
         return result.messages[0]?.ts === target.threadId
-            ? binding
+            ? { ...binding, verification: 'verified' }
             : { state: 'held', reason: 'thread_channel_mismatch' };
     } catch {
         return { state: 'held', reason: 'live_lookup_failed' };

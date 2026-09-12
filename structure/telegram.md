@@ -643,6 +643,28 @@ Mounted at `/api/dashboard/telegram-hub` (`loopbackOnly` middleware).
 - 결과 전송은 작업에 바인딩된 목적지로만 간다. 활성 채널로 보내는 경로는 없다 —
   목적지는 완결돼 있거나 보류되며, 자세한 규칙은 이 문서 위쪽
   `heartbeat-destination.ts` 절에 있다.
+- bound 바인딩은 `verification` 을 함께 싣는다: `unverified`(순수 파싱 — 검사를 한 적
+  없음), `verified`(`conversations.replies` 가 실제로 통과), `unsupported`(그 형태에
+  live 검사가 **존재하지 않음** — 비-Slack 대상과 Slack `channel_root`). 불리언이 아닌
+  이유는 "검사가 없다" 와 "검사가 실패했다" 가 같은 단어가 되면 안 되기 때문이다.
+  불리언이었다면 모든 Discord·Telegram 잡이 영원히 `false` 를 달고 다니며 멀쩡히 도는
+  틱이 실패한 조회처럼 보였을 것이다.
+- 스크립트 러너는 부모 환경변수를 **그대로 물려주지 않는다**. `SLACK_` · `TELEGRAM_` ·
+  `DISCORD_` 접두사는 제외된다. 이 경로의 설계 자체가 스코프된 grant 하나만 넘기는
+  것인데, 그 밑으로 원시 봇 토큰까지 흘러가면 grant 는 장식이 된다. 접두사 기준이라
+  나중에 추가되는 채널 변수도 기본 제외다. 의도적으로 약간 넓어서 `SLACK_CHANNEL_IDS`
+  같은 allowlist 도 빠진다 — 필요하면 명시적으로 주면 된다. grant 는 필터 **이후** 에
+  적용되므로 정작 필요한 비밀은 살아남는다.
+- 비-Slack 목적지로 도는 잡은 destination-bound authority **없이** 돈다는 사실을 잡마다
+  한 번 경고하고 `getHeartbeatRuntimeState().unenforcedDestinations` 로 노출한다.
+  `enforceDestination` grant 는 Slack 전용이고, 그 사실을 런타임이 말한 적이 없어서
+  Discord 틱이 로그상으로는 보호되는 Slack 틱과 똑같아 보였다.
+
+**알려진 크로스채널 공백 (이 유닛에서 고치지 않음).** `src/discord/bot.ts` 의 전송
+채널 결정은 `req.chatId || req.target?.threadId || req.target?.targetId` 순서라, 바인딩된
+Discord 하트비트의 target 이 `threadId` 를 갖고 있으면 잡이 지정한 대화가 아니라 그
+id 로 간다 — 하트비트 쪽 바인딩은 완결돼 보이므로 보류도 걸리지 않는다. 이 순서는
+예약 전송만이 아니라 모든 Discord 전송을 떠받치므로 별도 감사가 필요하다.
 
 ### `settings.heartbeat` 는 스케줄러가 읽지 않는다
 
