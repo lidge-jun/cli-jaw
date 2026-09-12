@@ -223,6 +223,8 @@ All trace routes set `Cache-Control: no-store` before auth/parsing. Activity dis
 
 `GET /api/heartbeat/:jobId/mention-watch-hold` → `{ jobId, held, state }`. v1 ledger가 남은 job은 `heartbeat.json`의 `enabled`와 무관하게 스케줄에서 보류(hold)된다. v1 행에는 workspace/user가 없어서 v2 키로 옮기려면 소유자를 추측해야 하고, 그 추측이 곧 v2가 막으려는 오배정이기 때문이다.
 
+`GET /api/heartbeat`의 각 job은 마지막 **승인된** 틱의 결과를 `lastRun`으로 함께 싣는다: `{ jobId, startedAt, finishedAt, execution: "ok"|"error"|"skipped", delivery: "delivered"|"not_delivered"|"suppressed"|"not_requested", reason?, superseded, consecutiveFailures, consecutiveSkips }`. `held`와 같은 의미의 additive 필드라 모르는 클라이언트는 그대로 동작한다. 실행 상태와 전달 상태를 분리하는 이유는 전송 실패가 작업 실패가 아니기 때문이고, 그래서 전송 실패는 `execution: "ok"`로 남으며 실패 streak를 올리지 않는다. 거부(skipped)는 자체 카운터를 갖는다 — 매 틱 거부하는 job이 streak 0에 머물러 영원히 보이지 않는 것이 이 기록이 없애려는 상태다. 어느 카운터든 임계값에 닿으면 `getHeartbeatRuntimeState().failing`에 나타나지만 타이머는 유지된다. 기록은 프로세스 로컬이므로 재시작 이후 한 번도 틱하지 않은 job에는 `lastRun`이 **없다** — 낡은 값 대신 부재가 정직한 답이다.
+
 `POST /api/heartbeat/:jobId/mention-watch-fresh-start` `{ since }` → 보류 해제. 빈 `since`는 `400`이다(floor 없는 watch는 도달 가능한 history를 거꾸로 훑어 이미 답한 것을 다시 답한다). workspace 검증(`auth.test`)이 유일한 await이고 그 뒤는 전부 동기다 — 검증 전에 hold와 파일을 snapshot한 뒤 await하면, 패배한 승인이 낡은 파일 사본으로 재개해 승자의 floor를 덮어쓴다(DB는 그 뒤에야 conflict를 알려 주므로 파일 손상은 이미 끝나 있다). 순서는 파일 저장(temp+rename) → 단일 트랜잭션(`pending`→`resolved` CAS → v1 archive → delete) → `startHeartbeat()`이며 교환 불가다. 사이에서 죽으면 새 floor만 저장되고 보류는 남으므로 재시도로 복구된다. 반대 순서는 옛 floor가 살아 있는 채로 보류를 풀어 backlog를 replay한다. 같은 `since`로 재시도하면 `already-resolved`, 다른 `since`면 `409`, 보류 이력이 없으면 `404`다. 일반 `PUT`의 `enabled: true`는 승인으로 읽지 않는다 — 모든 UI가 `mentionWatch`를 생략해 보내므로, 저장 클릭을 동의로 해석하면 무관한 편집이 보류를 풀어 버린다.
 
 `POST /api/channel/send`에서 `channel`은 `telegram|discord|slack|active` transport다. 대화 ID는 `chat_id` 또는 `target.targetId`에 넣는다. Slack thread를 명시할 때 `target.threadId`는 reply ts가 아닌 parent message ts다. request-scoped turn grant가 있으면 target 생략은 그 grant의 대화와 thread로 고정된다. full-local은 명시적 주소가 필요하며, server-owned `enforceDestination` grant만 생략 주소를 공급한다. 빈 `slack.channelIds`는 임의 explicit channel을 열지 않으며, `lastActive/latestSeen`은 같은 대화에 보낼 수 있는지 확인하는 근거일 뿐 명시 주소의 thread를 바꾸지 않는다.
@@ -423,6 +425,7 @@ once per request. No credentials are returned.
 | `memory_status` | memory sidebar / runtime 상태 갱신 신호 |
 | `system_notice` | compact refresh 같은 시스템 공지 |
 | `heartbeat_pending` | pending heartbeat job 수 |
+| `heartbeat_run` | 승인된 heartbeat 틱 1건의 결과 record (execution/delivery + 연속 실패·skip 카운터) |
 | `worker_stalled` / `worker_disconnected` / `worker_timeout` | distributed worker 상태 변화; 같은 상태가 `/api/orchestrate/worker-progress`의 safe `attention` metadata에도 반영됨 |
 | `goal_done` / `goal_done_rejected` / `goal_cancel_requested` / `goal_continuation` / `goal_continuation_failed` / `goal_continuation_limit` | durable goal / bounded continuation lifecycle. `goal_cancel_requested` replaced `goal_cancel`: an AI-authored marker now clears timers and asks, rather than archiving the goal outright (#441) |
 | `goal_pause_detected` / `goal_pause_gate_pending` | goal pause 2-tap gate 감지 및 pending gate continuation suppression |

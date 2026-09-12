@@ -2,7 +2,8 @@ import type { Express } from 'express';
 import type { AuthMiddleware } from './types.js';
 import { loadHeartbeatFile, saveHeartbeatFile, isHeartbeatDestination, isHeartbeatMentionWatch, settings } from '../core/config.js';
 import type { HeartbeatDestination, HeartbeatMentionWatch, HeartbeatJob } from '../core/config.js';
-import { getHeartbeatLiveDestinationHold, startHeartbeat } from '../memory/heartbeat.js';
+import { getHeartbeatLiveDestinationHold, getHeartbeatRunRecord, startHeartbeat } from '../memory/heartbeat.js';
+import type { HeartbeatRunRecord } from '../memory/heartbeat-run-record.js';
 import { isCompleteHeartbeatDestination, resolveHeartbeatBinding } from '../memory/heartbeat-destination.js';
 import { validateHeartbeatScheduleInput } from '../memory/heartbeat-schedule.js';
 import { approveLegacyFreshStart, quarantineState, detectLegacyMentionWatch, isQuarantined } from '../memory/legacy-mention-watch-quarantine.js';
@@ -106,6 +107,17 @@ export function normalizeHeartbeatPutRunnerFields(
     }) };
 }
 
+/** Attach the last admitted tick's outcome.
+ *
+ *  Additive beside `held`, for the reason `held` was additive: a client that does
+ *  not know the field behaves exactly as before. The record is process-local, so a
+ *  job that has not ticked since the last restart carries NO `lastRun` rather than
+ *  a stale one — absent is the honest answer, not a zeroed record. */
+function withLastRun<T extends { id?: string }>(job: T): T | (T & { lastRun: HeartbeatRunRecord }) {
+    const lastRun = job.id ? getHeartbeatRunRecord(job.id) : undefined;
+    return lastRun ? { ...job, lastRun } : job;
+}
+
 export function registerHeartbeatRoutes(app: Express, requireAuth: AuthMiddleware): void {
     // `enabled` is the operator's intent; it is not the same as running.
     //
@@ -119,7 +131,7 @@ export function registerHeartbeatRoutes(app: Express, requireAuth: AuthMiddlewar
         detectLegacyMentionWatch(Date.now());
         res.json({
             ...file,
-            jobs: file.jobs.map(job => (job.mentionWatch && job.id && isQuarantined(job.id)
+            jobs: file.jobs.map(job => withLastRun(job.mentionWatch && job.id && isQuarantined(job.id)
                 ? { ...job, held: 'unmigrated_mention_watch_ledger' as const }
                 : heldForDestination(job) ?? job)),
         });
