@@ -174,3 +174,50 @@ test('HDB-L05 channel_root and non-Slack destinations require no Slack read', as
     }
     assert.equal(calls, 0);
 });
+
+// ─── wp5: what a binding actually PROVED ───
+//
+// A boolean was the first design and an audit killed it: every Discord, Telegram
+// and Slack channel_root job would carry verified:false forever, which reads as a
+// FAILED check on jobs that ran perfectly. Three states keep "no check exists for
+// this shape" and "a check failed" from being the same word.
+
+test('HDB-V01 a pure parse never claims verification', () => {
+    const binding = resolveHeartbeatBinding({ channel: 'slack', targetId: 'C1', threadId: '1.0' });
+    assert.equal(binding.state, 'bound');
+    assert.equal(binding.state === 'bound' ? binding.verification : null, 'unverified');
+});
+
+test('HDB-V02 a real Slack check is the only thing that yields verified', async () => {
+    const fetchImpl = (async () => ({
+        ok: true, status: 200, headers: { get: () => null },
+        text: async () => JSON.stringify({ ok: true, messages: [{ ts: '1.0' }] }),
+    })) as unknown as typeof fetch;
+    const binding = await verifyHeartbeatThreadBindingLive(
+        { channel: 'slack', targetId: 'C1', threadId: '1.0' },
+        { token: 'xoxb-test', fetchImpl },
+    );
+    assert.equal(binding.state, 'bound');
+    assert.equal(binding.state === 'bound' ? binding.verification : null, 'verified');
+});
+
+test('HDB-V03 shapes with no live check are unsupported, not unverified', async () => {
+    // Reporting these as unverified would make every healthy Discord or Telegram
+    // tick look like a lookup that failed.
+    let calls = 0;
+    const fetchImpl = (async () => { calls += 1; throw new Error('must not be called'); }) as unknown as typeof fetch;
+    for (const destination of [
+        { channel: 'discord', targetId: 'D1' },
+        { channel: 'telegram', targetId: '12345' },
+        { channel: 'slack', targetId: 'C1', scope: 'channel_root' },
+    ]) {
+        const binding = await verifyHeartbeatThreadBindingLive(destination, { token: 'xoxb-test', fetchImpl });
+        assert.equal(binding.state, 'bound', JSON.stringify(destination));
+        assert.equal(
+            binding.state === 'bound' ? binding.verification : null,
+            'unsupported',
+            JSON.stringify(destination),
+        );
+    }
+    assert.equal(calls, 0, 'an unsupported shape must cost no Slack read');
+});

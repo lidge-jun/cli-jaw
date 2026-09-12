@@ -129,6 +129,38 @@ const liveDestinationHolds = new Map<string, LiveDestinationHold>();
 // durable home is the anchor table and that schema work is its own unit. A record
 // that forgets on restart still beats today's nothing, and the API says so.
 const runRecords = new Map<string, HeartbeatRunRecord>();
+// Jobs observed running without destination-bound authority. Set membership is
+// what makes the notice once-per-job instead of once-per-tick; a warning on every
+// five-minute tick is noise an operator learns to skip past.
+const unenforcedDestinationJobs = new Set<string>();
+
+/** Environment names the heartbeat script runner must not inherit.
+ *
+ *  The caller's whole design is to hand the child ONE scoped secret, the Slack tool
+ *  grant activated further down. Spreading `process.env` underneath it handed the
+ *  same child the raw bot token whenever a channel was configured through the
+ *  environment, which this repository explicitly supports — and that makes the
+ *  scoped grant decoration.
+ *
+ *  Matched by PREFIX so a channel variable added later is excluded by default
+ *  rather than leaked until someone remembers. Deliberately slightly broad:
+ *  allowlists like SLACK_CHANNEL_IDS go too. A script that genuinely needs one can
+ *  be given it explicitly; inheriting a credential by accident is what stops. */
+const CHANNEL_SECRET_ENV_PREFIXES = ['SLACK_', 'TELEGRAM_', 'DISCORD_'] as const;
+
+export function heartbeatScriptEnv(
+    source: NodeJS.ProcessEnv,
+    extra: Record<string, string>,
+): Record<string, string> {
+    const env: Record<string, string> = {};
+    for (const [key, value] of Object.entries(source)) {
+        if (value === undefined) continue;
+        if (CHANNEL_SECRET_ENV_PREFIXES.some(prefix => key.startsWith(prefix))) continue;
+        env[key] = value;
+    }
+    // Applied AFTER the filter, so the grant the script actually needs survives it.
+    return { ...env, ...extra };
+}
 type HeartbeatDestinationJobRef = { id?: unknown; name?: unknown; destination?: unknown };
 
 function heartbeatJobKey(job: HeartbeatDestinationJobRef): string {
@@ -242,6 +274,10 @@ export function getHeartbeatRuntimeState() {
         failing: [...runRecords.entries()]
             .filter(([, record]) => isHeartbeatJobFailing(record))
             .map(([jobId]) => jobId),
+        // Jobs whose destination-bound Slack grant does not exist for their
+        // transport. Reported rather than implied: a Discord or Telegram heartbeat
+        // otherwise looks exactly like a guarded Slack one.
+        unenforcedDestinations: [...unenforcedDestinationJobs],
     };
 }
 
@@ -356,6 +392,7 @@ export function startHeartbeat() {
     for (const id of [...intervalAnchors.keys()]) if (!liveIds.has(id)) intervalAnchors.delete(id);
     for (const id of [...heartbeatCronSlots.keys()]) if (!liveIds.has(id)) heartbeatCronSlots.delete(id);
     for (const id of [...runRecords.keys()]) if (!liveIds.has(id)) runRecords.delete(id);
+    for (const id of [...unenforcedDestinationJobs]) if (!liveIds.has(id)) unenforcedDestinationJobs.delete(id);
     for (const key of [...liveDestinationHolds.keys()]) if (!liveKeys.has(key)) liveDestinationHolds.delete(key);
     const n = heartbeatTimers.size;
     log.info(`[heartbeat] ${n} job${n !== 1 ? 's' : ''} active`);
@@ -406,7 +443,7 @@ export function runHeartbeatScript(
         execFile(file, args, {
             timeout: 10 * 60_000,
             maxBuffer: 64 * 1024,
-            env: { ...process.env, ...extraEnv },
+            env: heartbeatScriptEnv(process.env, extraEnv),
         }, (error, stdout, stderr) => {
             const code = error && typeof error === 'object' && 'code' in error && typeof error.code === 'number' ? error.code : error ? 1 : 0;
             resolve(parseHeartbeatReport([stdout, stderr].filter(Boolean).join('\n'), code));
@@ -821,6 +858,15 @@ export async function runHeartbeatJob(job: Record<string, any>, deps: HeartbeatJ
             return;
         }
         updateHeartbeatLiveDestinationHold(job, null);
+        // `reserveHeartbeatDestinationGrant` returns a bare releaser for any
+        // non-Slack target, which reads at the call site exactly like a successful
+        // reservation. The public contract already says the grant is Slack's; the
+        // runtime said nothing, so a Discord tick looked guarded in the logs.
+        if (jobId && destinationBinding.target.channel !== 'slack' && !unenforcedDestinationJobs.has(jobId)) {
+            unenforcedDestinationJobs.add(jobId);
+            log.warn(`[heartbeat:${job["name"]}] ${destinationBinding.target.channel} destination runs without `
+                + `destination-bound authority — the enforceDestination grant exists only for Slack`);
+        }
         const schedule = normalizeHeartbeatSchedule(job["schedule"]);
         const timeZone = getHeartbeatScheduleTimeZone(schedule);
         const now = formatHeartbeatNow(schedule);
