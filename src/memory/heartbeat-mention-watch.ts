@@ -50,8 +50,20 @@ export type MentionWatchTickResult = {
     /** Channels beyond the scanner's ceiling. Non-empty means a hand-edited file
      *  got past config validation; reported so it is visible rather than silent. */
     overflow: string[];
+    /** At least one channel's backward walk did not reach its cursor this tick.
+     *
+     *  Deliberately NOT called a backlog. The scanner raises it for a spent window
+     *  budget, a 429, a network error, an abort, and a `has_more` page that could
+     *  not advance. It is a reason to look, not a measurement. */
+    scanIncomplete: boolean;
+    /** The global hit cap stopped the scan before every channel was read.
+     *
+     *  Needed because `scanIncomplete` stays FALSE in that case, so its negation
+     *  alone would report caught-up over channels nobody looked at. Caught up is
+     *  both of these false. */
+    hitCapReached: boolean;
     /** Set when the tick stopped early. */
-    stoppedBecause?: 'rate_limited' | 'yielded' | 'aborted';
+    stoppedBecause?: 'rate_limited' | 'yielded' | 'aborted' | 'budget';
 };
 
 export type MentionWatchDeps = {
@@ -79,6 +91,16 @@ export type MentionWatchDeps = {
     fetchImpl?: typeof fetch | undefined;
     signal?: AbortSignal | undefined;
     now?: () => number;
+    /** Wall-clock allowance for the ANSWERING phase, measured from after the scan.
+     *
+     *  Not from tick entry: the scan legitimately sleeps for minutes on pacing, so
+     *  a whole-tick budget could expire with zero answers while the rotation anchor
+     *  had already moved.
+     *
+     *  It bounds what is STARTED, not total wall time — an answer admitted with a
+     *  millisecond left still runs to its own idle bound, so the honest worst case
+     *  is this budget plus one turn. */
+    answerBudgetMs?: number | undefined;
     log?: (message: string) => void;
 };
 
@@ -120,6 +142,7 @@ export async function runMentionWatchTick(
     const result: MentionWatchTickResult = {
         answered: 0, quiet: 0, failed: 0,
         unreadable: [], unauthorized: [], overflow: [],
+        scanIncomplete: false, hitCapReached: false,
     };
 
     const { allowed, rejected } = authorizedChannels(watch.channelIds, deps.allowlist);
@@ -156,6 +179,9 @@ export async function runMentionWatchTick(
 
     result.unreadable = scan.failed.map(f => f.channelId);
     result.overflow = scan.overflowChannels;
+    // Computed by the scanner and, until now, dropped on the floor here.
+    result.scanIncomplete = scan.truncated;
+    result.hitCapReached = scan.hitCapReached;
     if (scan.overflowChannels.length) {
         log(`mention watch: ${scan.overflowChannels.length} channel(s) past the scanner ceiling were not read: ${scan.overflowChannels.join(', ')}`);
     }
@@ -170,8 +196,18 @@ export async function runMentionWatchTick(
         setResumeBefore(ns, channelId, bound, now());
     }
 
+    // The answering clock starts HERE, after the scan, for the reason given on
+    // `answerBudgetMs`.
+    const answeringSince = now();
     for (const hit of scan.hits) {
         if (deps.signal?.aborted) { result.stoppedBecause = 'aborted'; break; }
+        // Before the answer, never after: checking afterwards would spend a full
+        // orchestrator turn to discover the tick was already over. An unanswered
+        // hit keeps no receipt, so the next tick has it.
+        if (deps.answerBudgetMs !== undefined && now() - answeringSince >= deps.answerBudgetMs) {
+            result.stoppedBecause = 'budget';
+            break;
+        }
         // Re-checked per item, not once for the batch: the previous answer may
         // have taken minutes, and a user who started typing during it outranks
         // the rest of this backlog.

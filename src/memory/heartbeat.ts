@@ -60,6 +60,18 @@ const HEARTBEAT_SCOPE = 'default';
  *  if it were the mention. A lane nobody else submits to keeps the background turn
  *  unsteerable while the session id still puts the answer in the right history. */
 const MENTION_WATCH_SCOPE_PREFIX = 'mention-watch:';
+/** How long one tick may spend ANSWERING mentions.
+ *
+ *  A mention-watch tick is a LOOP of orchestrator turns — `maxHits` of them, each
+ *  bounded only by an idle timeout — and `heartbeatBusy` is held across all of it,
+ *  so one busy morning queues every other job in the home behind it.
+ *
+ *  Ten minutes matches the script runner's own ceiling at the `execFile` call below,
+ *  so no single tick outlasts the slowest bounded runner in this file by design. It
+ *  clocks the answering phase only: the scan can legitimately sleep for minutes on
+ *  pacing, and charging that to the answer allowance would let a slow scan end a tick
+ *  having answered nothing. */
+const MENTION_WATCH_ANSWER_BUDGET_MS = 10 * 60_000;
 import { applyOutputPolicy, loadPolicyHooksConfig } from '../core/policy-hooks.js';
 import { setRecordPending } from '../core/policy-flags.js';
 import { parseHeartbeatReport, type HeartbeatReport } from './heartbeat-report.js';
@@ -495,6 +507,7 @@ async function runMentionWatchJob(job: Record<string, any>, watch: HeartbeatMent
         token,
         selfUserId: getSlackSelfUserId(),
         allowlist: readSlackAllowlist(sc["channelIds"]),
+        answerBudgetMs: MENTION_WATCH_ANSWER_BUDGET_MS,
         log: (message) => log.info(`[heartbeat:${job["name"]}] ${message}`),
         // The tick already knows how to stop: it checks deps.signal before each
         // answer and reports stoppedBecause 'aborted'. Nothing ever handed it one,
@@ -578,7 +591,17 @@ async function runMentionWatchJob(job: Record<string, any>, watch: HeartbeatMent
     });
 
     const stopped = outcome.stoppedBecause ? ' (stopped: ' + outcome.stoppedBecause + ')' : '';
-    log.info(`[heartbeat:${job["name"]}] mention watch: ${outcome.answered} answered, ${outcome.quiet} quiet, ${outcome.failed} failed${stopped}`);
+    // Counts alone cannot tell a caught-up watch from one still draining, which is
+    // the distinction the scanner computes and this line used to discard. Neither
+    // flag means backlog on its own: `scanIncomplete` also covers a 429 or an
+    // aborted walk, and `hitCapReached` is the case where `scanIncomplete` stays
+    // false while whole channels went unread.
+    const drain = [
+        outcome.scanIncomplete ? 'scan incomplete' : '',
+        outcome.hitCapReached ? 'hit cap reached' : '',
+    ].filter(Boolean).join(', ');
+    log.info(`[heartbeat:${job["name"]}] mention watch: ${outcome.answered} answered, ${outcome.quiet} quiet, `
+        + `${outcome.failed} failed${stopped}${drain ? ` — ${drain}` : ' — caught up'}`);
     return true;
 }
 
