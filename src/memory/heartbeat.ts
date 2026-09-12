@@ -78,6 +78,20 @@ const heartbeatTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const heartbeatCronSlots = new Map<string, string>();
 let heartbeatWatcher: fs.FSWatcher | null = null;
 let heartbeatBusy = false;
+// One job, one run. `heartbeatBusy` already stops two try-bodies from
+// interleaving, because it is set synchronously before the first await, so this
+// is not about concurrency. It is about the SAME job being executed twice in a
+// row: a tick deferred during an active PABCD cycle stays queued, a later tick
+// for that job runs directly once the cycle ends, and the finishing run then
+// drains the copy it left behind. Two identical reports, seconds apart. The
+// queue dedupe below cannot see this because the second arrival never queues.
+const inFlightJobs = new Set<string>();
+// Bumped whenever the schedule is torn down, which includes every settings
+// reload and every PUT through the API. A run that was admitted under an older
+// generation has been superseded: its job object, destination and prompt may all
+// have been replaced on disk, so it must not send, write an anchor, or drain.
+let heartbeatGeneration = 0;
+let heartbeatAbort: AbortController | null = null;
 type HeartbeatPendingReason = 'busy' | 'pabcd_active' | 'agent_busy';
 type HeartbeatPendingPolicy = 'defer';
 interface PendingHeartbeatJob {
@@ -181,6 +195,18 @@ function queueHeartbeatJob(
     return true;
 }
 
+/** Drop any queued copy of a job that is about to run, or has just run. */
+function forgetPendingJob(jobId: string): void {
+    for (let i = pendingJobs.length - 1; i >= 0; i -= 1) {
+        if (String(pendingJobs[i]?.job["id"] ?? "") === jobId) pendingJobs.splice(i, 1);
+    }
+}
+
+/** The signal a live tick should observe; null until the first run arms one. */
+export function heartbeatRunSignal(): AbortSignal | undefined {
+    return heartbeatAbort?.signal;
+}
+
 export function getHeartbeatRuntimeState() {
     return pendingSnapshot();
 }
@@ -226,9 +252,23 @@ export function startHeartbeat() {
 }
 
 export function stopHeartbeat() {
+    // Tearing down timers was never enough. A tick already inside its try-body
+    // kept the job object it was admitted with and went on to send, anchor and
+    // write the mention-watch ledger, and the queue it left behind was still
+    // drained by whatever finished next, including from the external callers in
+    // orchestrator/pipeline, routes/orchestrate, cli/handlers-runtime and
+    // agent/spawn/queue. Bump the generation and abort first so an in-flight run
+    // stops at its next checkpoint, then drop the queue it would have replayed.
+    heartbeatGeneration += 1;
+    heartbeatAbort?.abort();
+    heartbeatAbort = null;
+    pendingJobs.length = 0;
     for (const timer of heartbeatTimers.values()) clearTimeout(timer);
     heartbeatTimers.clear();
-    heartbeatCronSlots.clear();
+    // Cron slots deliberately survive. startHeartbeatCronLoop runs the current
+    // minute immediately on arm, so clearing the map here let a save plus the
+    // file watcher rebuild the schedule and fire the same minute again. Keeping
+    // the slot means the immediate tick recognises work it already did.
 }
 
 export interface HeartbeatReportDecision { send: boolean; anchor: boolean; delivered: boolean }
@@ -354,6 +394,11 @@ async function runMentionWatchJob(job: Record<string, any>, watch: HeartbeatMent
         selfUserId: getSlackSelfUserId(),
         allowlist: readSlackAllowlist(sc["channelIds"]),
         log: (message) => log.info(`[heartbeat:${job["name"]}] ${message}`),
+        // The tick already knows how to stop: it checks deps.signal before each
+        // answer and reports stoppedBecause 'aborted'. Nothing ever handed it one,
+        // so a scan that started before a settings reload kept answering and kept
+        // writing receipts under the old configuration.
+        ...(heartbeatRunSignal() ? { signal: heartbeatRunSignal()! } : {}),
         // Yield to anything a person is waiting on. Re-read per item because the
         // previous answer may have taken minutes.
         yieldNow: (hit) => {
@@ -573,6 +618,14 @@ async function reserveHeartbeatDestinationGrant(
 
 export async function runHeartbeatJob(job: Record<string, any>, deps: HeartbeatJobDeps = {}) {
     const runner = job["runner"] || 'main';
+    const jobId = String(job["id"] ?? job["name"] ?? '');
+    // Checked before every other guard. A job already executing must be skipped
+    // outright, not queued: queueing it is what produced the back-to-back double
+    // report, because the finishing run drains what the queue still holds.
+    if (jobId && inFlightJobs.has(jobId)) {
+        log.info(`[heartbeat:${job["name"]}] already running, skip`);
+        return;
+    }
     if (runner === 'main' && getState('default') !== 'IDLE') {
         const queued = queueHeartbeatJob(job, 'pabcd_active', 'defer');
         log.info(`[heartbeat:${job["name"]}] ${queued ? 'deferred' : 'already deferred'} during active PABCD (${pendingJobs.length} pending)`);
@@ -592,6 +645,16 @@ export async function runHeartbeatJob(job: Record<string, any>, deps: HeartbeatJ
         return;
     }
     heartbeatBusy = true;
+    // Admission point. From here the run owns this id, and the queue must not
+    // keep a copy of it: a deferred entry for this job was satisfied by this very
+    // tick. The generation is captured so the finally block can tell whether the
+    // schedule was torn down underneath it.
+    const generation = heartbeatGeneration;
+    if (jobId) {
+        inFlightJobs.add(jobId);
+        forgetPendingJob(jobId);
+    }
+    if (!heartbeatAbort) heartbeatAbort = new AbortController();
     try {
         // A mention watch replaces the prompt path entirely: its prompt describes
         // how to answer a message that has not been found yet, so running it bare
@@ -749,12 +812,20 @@ export async function runHeartbeatJob(job: Record<string, any>, deps: HeartbeatJ
         log.error(`[heartbeat:${job["name"]}] error:`, (err as Error).message);
     } finally {
         heartbeatBusy = false;
-        await drainPending();
+        if (jobId) inFlightJobs.delete(jobId);
+        // A superseded run must not hand work to the next one. Draining here after
+        // stopHeartbeat would replay jobs from a configuration the operator has
+        // already replaced, which is exactly what made stop look advisory.
+        if (generation === heartbeatGeneration) await drainPending();
     }
 }
 
 export async function drainPending() {
     if (pendingJobs.length === 0) return;
+    // Reachable from orchestrator/pipeline, routes/orchestrate, cli/handlers-runtime
+    // and agent/spawn/queue, none of which know whether the schedule is still
+    // armed. Without this a stopped heartbeat kept starting jobs.
+    if (heartbeatTimers.size === 0) return;
     if (isAgentBusy(HEARTBEAT_SCOPE) || messageQueue.length > 0 || hasPendingWorkerReplays(HEARTBEAT_SCOPE)) return;
     const next = pendingJobs.shift()?.job;
     if (!next) return;
