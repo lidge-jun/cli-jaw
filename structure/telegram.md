@@ -561,11 +561,13 @@ Mounted at `/api/dashboard/telegram-hub` (`loopbackOnly` middleware).
 
 ---
 
-## memory/heartbeat.ts — Scheduled Jobs (891L)
+## memory/heartbeat.ts — Scheduled Jobs (969L)
 
 | Function | 역할 |
 | --- | --- |
 | `startHeartbeat()` | cron-like 주기 작업 시작 |
+| `nextIntervalDelay(anchor, periodMs, now)` | 앵커 기준 다음 경계까지의 ms — 항상 `(0, periodMs]` |
+| `getHeartbeatIntervalAnchor(jobId)` | 그 작업의 인터벌 격자 기준 시각 (진단/검증용) |
 | `stopHeartbeat()` | 세대 증가 + abort + 대기 큐 비우기 + 타이머 해제 (cron 슬롯은 유지) |
 | `runHeartbeatJob(job)` | 단일 작업 실행 (in-flight skip + busy guard + 세대 포착) |
 | `drainPending()` | 대기 큐 1건 실행 — 스케줄이 해제된 상태에서는 아무것도 하지 않는다 |
@@ -591,12 +593,35 @@ Mounted at `/api/dashboard/telegram-hub` (`loopbackOnly` middleware).
   에서도 호출되므로, 타이머가 없으면 스스로 아무 일도 하지 않는다.
 - cron 슬롯 맵은 재로드를 넘어 살아남는다. `startHeartbeatCronLoop`가 arm 즉시 현재 분을
   실행하므로, 슬롯을 비우면 저장 + 파일 감시 재빌드로 같은 분이 두 번 발사된다.
+- `every` 작업은 `setInterval`이 아니라 **앵커 기반 `setTimeout` 체인**으로 arm 된다.
+  `setInterval`은 arm 시점부터 재는데 `startHeartbeat()`는 부팅(`server.ts`), 모든
+  `PUT /api/heartbeat`, 감시자가 보는 모든 `heartbeat.json` 쓰기, mention-watch fresh
+  start 마다 다시 arm 한다. 주기보다 자주 저장되는 홈에서는 그 작업이 **한 번도 발사되지
+  않았고**, 매 arm이 각각으로는 정상으로 보였기 때문에 아무것도 기록되지 않았다.
+  앵커 맵은 cron 슬롯과 같은 이유로 `stopHeartbeat()`를 넘어 살아남는다.
+- 단 **주기가 바뀌면 다시 앵커한다**. 옛 기준점을 새 주기에 그대로 쓰면 다음 경계가
+  몇 밀리초 뒤에 올 수 있어 60m → 61m 수정이 즉시 틱을 유발한다 — `setInterval`은 못 하던
+  일이고, 앵커를 얻자고 치를 값이 아니다. 시계가 뒤로 간 경우의 대기도 한 주기로 잘린다.
+- 파일에서 사라진 작업의 `intervalAnchors` · cron 슬롯 · live destination hold 는
+  `startHeartbeat()` 끝에서 정리된다. 기준은 `enabled`가 아니라 **파일에 없음**이다 —
+  비활성화했다 다시 켠 작업은 리듬을 유지해야 한다.
 - mention watch 틱은 스케줄러의 `AbortSignal`을 받는다. 이미 `deps.signal`을 읽고
   `stoppedBecause: 'aborted'`를 보고하던 경로가 이제 실제로 연결돼 있다.
 - 실행 프롬프트 앞에는 memory search 지시가 자동으로 붙는다
 - 결과 전송은 작업에 바인딩된 목적지로만 간다. 활성 채널로 보내는 경로는 없다 —
   목적지는 완결돼 있거나 보류되며, 자세한 규칙은 이 문서 위쪽
   `heartbeat-destination.ts` 절에 있다.
+
+### `settings.heartbeat` 는 스케줄러가 읽지 않는다
+
+`settings.json` 의 `heartbeat` 블록(`enabled`, `every`, `activeHours`, `target`)은
+`src/core/config.ts` 의 기본 스키마에 선언돼 있고 Manager 설정 페이지가 편집·저장하지만,
+`src/` 와 `bin/` 어디에서도 읽지 않는다. 스케줄러가 보는 것은 `~/.cli-jaw/heartbeat.json`
+의 per-job 설정뿐이다.
+
+실질적인 의미: 여기서 조용한 시간대(`activeHours`)를 설정해도 틱은 그대로 돌고,
+`enabled`를 꺼도 작업은 멈추지 않는다. 이 블록을 제거할지 실제로 연결할지는 기존 설치의
+동작을 바꾸는 결정이라 아직 내려지지 않았다 — 그때까지 이 문단이 사실관계다.
 
 ---
 

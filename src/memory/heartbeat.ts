@@ -76,6 +76,11 @@ import {
 
 const heartbeatTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const heartbeatCronSlots = new Map<string, string>();
+// Where each `every` job's grid is measured from, with the period it was
+// measured for. Survives `stopHeartbeat` on purpose — that is the whole point,
+// see `scheduleIntervalJob`.
+type IntervalAnchor = { anchor: number; periodMs: number };
+const intervalAnchors = new Map<string, IntervalAnchor>();
 let heartbeatWatcher: fs.FSWatcher | null = null;
 let heartbeatBusy = false;
 // One job, one run. `heartbeatBusy` already stops two try-bodies from
@@ -211,6 +216,69 @@ export function getHeartbeatRuntimeState() {
     return pendingSnapshot();
 }
 
+/** Milliseconds until the next boundary of `periodMs` measured from `anchor`.
+ *
+ *  Always inside `(0, periodMs]`. Landing exactly on a boundary returns a FULL
+ *  period rather than zero, so an arm that happens to coincide with one does not
+ *  fire immediately and then again a moment later.
+ *
+ *  A clock that stepped BACKWARDS is clamped to one period instead of returning
+ *  the raw distance to the anchor. The raw distance is unbounded: a machine whose
+ *  clock jumps back a month would arm a timer for a month, which is not a schedule
+ *  and is something `setInterval` could never express. */
+export function nextIntervalDelay(anchor: number, periodMs: number, now: number): number {
+    const elapsed = now - anchor;
+    if (elapsed < 0) return Math.min(-elapsed, periodMs);
+    const remainder = elapsed % periodMs;
+    return remainder === 0 ? periodMs : periodMs - remainder;
+}
+
+/** The instant a job's interval grid is measured from.
+ *
+ *  Exported because the anchor is otherwise unobservable, and "a save did not
+ *  reset the phase" is exactly the property worth asserting. */
+export function getHeartbeatIntervalAnchor(jobId: string): number | undefined {
+    return intervalAnchors.get(jobId)?.anchor;
+}
+
+/** Arm an `every` job on a grid that survives a rebuild.
+ *
+ *  `setInterval` measured from the arm, and `startHeartbeat` re-arms on boot
+ *  (`server.ts`), on every `PUT /api/heartbeat`, on every `heartbeat.json` write
+ *  the watcher sees, and on a mention-watch fresh start. A home saved more often
+ *  than a job's period therefore never reached that job's first fire, and nothing
+ *  logged it because each arm looked correct on its own.
+ *
+ *  The anchor fixes that: the grid is measured from a fixed instant, so a rebuild
+ *  resumes the schedule instead of restarting the wait.
+ *
+ *  A period CHANGE re-anchors. Keeping the old origin under a new period would let
+ *  the next boundary land milliseconds away, so editing 60m to 61m could tick at
+ *  once — something the old `setInterval` could not do, and not a regression worth
+ *  trading for this. Same period keeps the grid; a different one starts a new one. */
+function scheduleIntervalJob(job: Record<string, any>, periodMs: number): void {
+    const jobId = String(job["id"]);
+    const existing = intervalAnchors.get(jobId);
+    const anchor = existing && existing.periodMs === periodMs ? existing.anchor : Date.now();
+    intervalAnchors.set(jobId, { anchor, periodMs });
+    // Captured, not read live: `runHeartbeatJob` is async, so a teardown can land
+    // while it is awaiting. The cron loop needs no equivalent because its
+    // `runCurrent` is synchronous and its re-arm cannot be interleaved.
+    const generation = heartbeatGeneration;
+    const arm = (): void => {
+        const timer = setTimeout(() => {
+            if (generation !== heartbeatGeneration) return;
+            // Re-arm from the same anchor BEFORE running, so a slow turn cannot
+            // push the next boundary out.
+            arm();
+            void runHeartbeatJob(job);
+        }, nextIntervalDelay(anchor, periodMs, Date.now()));
+        timer.unref?.();
+        heartbeatTimers.set(jobId, timer);
+    };
+    arm();
+}
+
 export function startHeartbeat() {
     stopHeartbeat();
     const { jobs } = loadHeartbeatFile();
@@ -242,11 +310,17 @@ export function startHeartbeat() {
             scheduleCronJob(job);
             continue;
         }
-        const ms = schedule.minutes * 60_000;
-        const timer = setInterval(() => runHeartbeatJob(job), ms);
-        timer.unref?.();
-        heartbeatTimers.set(job.id, timer);
+        scheduleIntervalJob(job, schedule.minutes * 60_000);
     }
+    // Per-job maps outlive their jobs otherwise. Keyed off ABSENCE FROM THE FILE
+    // rather than `enabled`, because a disabled job that is re-enabled should keep
+    // its cadence. `liveDestinationHolds` is keyed by id-or-name, so its live set
+    // uses the same derivation instead of assuming every job carries an id.
+    const liveIds = new Set(jobs.map(job => String(job?.id ?? '')).filter(Boolean));
+    const liveKeys = new Set(jobs.map(job => heartbeatJobKey(job)).filter(Boolean));
+    for (const id of [...intervalAnchors.keys()]) if (!liveIds.has(id)) intervalAnchors.delete(id);
+    for (const id of [...heartbeatCronSlots.keys()]) if (!liveIds.has(id)) heartbeatCronSlots.delete(id);
+    for (const key of [...liveDestinationHolds.keys()]) if (!liveKeys.has(key)) liveDestinationHolds.delete(key);
     const n = heartbeatTimers.size;
     log.info(`[heartbeat] ${n} job${n !== 1 ? 's' : ''} active`);
 }
@@ -269,6 +343,10 @@ export function stopHeartbeat() {
     // minute immediately on arm, so clearing the map here let a save plus the
     // file watcher rebuild the schedule and fire the same minute again. Keeping
     // the slot means the immediate tick recognises work it already did.
+    //
+    // Interval anchors survive for the same reason, one level up: they exist so a
+    // rebuild resumes a job's grid rather than restarting its wait, and clearing
+    // them here would reinstate exactly the defect they close.
 }
 
 export interface HeartbeatReportDecision { send: boolean; anchor: boolean; delivered: boolean }
