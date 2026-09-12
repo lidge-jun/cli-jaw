@@ -155,3 +155,56 @@ test('WCI-005: push and pull_request cover the SAME Windows-critical set', () =>
     // Manual dispatch is the escape hatch when a release needs the lane on demand.
     assert.ok(on.workflow_dispatch !== undefined, 'workflow_dispatch must remain available');
 });
+
+// WCI-006: the WSL lane must not sit on the one runner image that makes
+// setup-wsl call `wsl.exe --update`.
+//
+// setup-wsl v7.0.0 reaches that Microsoft endpoint only when every clause holds
+// (SetupWsl.kt:420-427): `wslVersion() != 1`, `ImageOS == "win22"`,
+// `RUNNER_ARCH == X64`, `RUNNER_ENVIRONMENT == "github-hosted"`. It answered 403
+// on one release SHA and hung for thirty minutes on another. Two clauses are
+// ours to choose. Dropping to `wsl-version: 1` is the cheaper one and the wrong
+// one: it certifies the installer against WSL1 rather than the WSL2 VM users
+// run, and src/core/platform-kind.ts cannot tell the two apart, so the evidence
+// would weaken while every test stayed green. Leaving win22 is the choice this
+// test pins; the wsl-version fallback stays legal but must be explicit.
+test('WCI-006: the WSL lane avoids the win22 --update path without weakening to WSL1', () => {
+    const job = (workflow.jobs ?? {})['windows-wsl'];
+    assert.ok(job, 'windows-wsl job must exist');
+    assert.ok(!job['continue-on-error'], 'windows-wsl must stay a blocking gate');
+
+    assert.notEqual(
+        job['runs-on'],
+        'windows-2022',
+        'windows-2022 is the one ImageOS that makes setup-wsl call wsl.exe --update (SetupWsl.kt:420-427)',
+    );
+
+    const setup = (job.steps ?? []).find((step: Record<string, unknown>) =>
+        String(step?.['uses'] ?? '').startsWith('Vampire/setup-wsl@'));
+    assert.ok(setup, 'the WSL lane must still provision through Vampire/setup-wsl');
+
+    // A hang has to die on its own budget. Asserted downward only: raising this
+    // is the move this test exists to notice.
+    const stepTimeout = setup['timeout-minutes'];
+    assert.equal(typeof stepTimeout, 'number', 'Setup WSL needs its own timeout-minutes');
+    assert.ok(stepTimeout <= 5, `Setup WSL timeout-minutes must stay <= 5 (got ${stepTimeout})`);
+
+    const jobTimeout = job['timeout-minutes'];
+    if (jobTimeout !== undefined) {
+        assert.ok(jobTimeout <= 25, `windows-wsl timeout-minutes must stay <= 25 (got ${jobTimeout})`);
+    }
+
+    const inputs = (setup['with'] ?? {}) as Record<string, unknown>;
+    // `update` upgrades the distribution's apt packages (SetupWsl.kt:253-255);
+    // it never governed the kernel call, so it must not be mistaken for the fix.
+    assert.notEqual(inputs['update'], true, 'distribution apt upgrade is not the kernel-update switch');
+
+    // The fallback is allowed, but only as a deliberate value. A WSL1 lane that
+    // appeared by accident would silently narrow what this gate proves.
+    if (inputs['wsl-version'] !== undefined) {
+        assert.ok(
+            [1, '1'].includes(inputs['wsl-version'] as string | number),
+            'wsl-version, if set, is the recorded WSL1 fallback and must be exactly 1',
+        );
+    }
+});

@@ -266,7 +266,23 @@ jobs:
   windows-wsl:
     name: Windows WSL postinstall policy
     if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
-    runs-on: windows-2022
+    # windows-2025, not windows-2022, and the reason is inside the action rather
+    # than the image. setup-wsl v7.0.0 calls `wsl.exe --update` from
+    # installDistribution only when ALL of these hold (SetupWsl.kt:420-427):
+    #   wslVersion() != 1 && ImageOS == "win22" && RUNNER_ARCH == X64
+    #   && RUNNER_ENVIRONMENT == "github-hosted"
+    # That call is a win22-specific WSL2 kernel workaround, and it reaches a
+    # Microsoft endpoint we do not control. It answered `Forbidden (403)` on
+    # 729f0dca (run 34624568593) and hung for 30 minutes on f8a6aac7 until the
+    # job was cancelled (run 34668399466 attempt 1); the same tree passed on
+    # attempt 2. Retry.kt at that tag re-invokes with no delay, so ten attempts
+    # burned two seconds against a deterministic 403.
+    # Leaving win22 makes the guard false while KEEPING WSL2. The alternative,
+    # `wsl-version: '1'`, also makes it false but certifies the installer against
+    # WSL1's translation layer instead of the WSL2 VM that real users run, and
+    # src/core/platform-kind.ts does not distinguish them — the suite would stay
+    # green on weaker evidence. That stays the recorded fallback, not the default.
+    runs-on: windows-2025
     timeout-minutes: 25
     steps:
       - name: Checkout
@@ -274,6 +290,10 @@ jobs:
 
       - name: Setup WSL
         uses: Vampire/setup-wsl@v7
+        # Bounds a hang, rather than buying a pass: the job may still take 25
+        # minutes, but provisioning that stops answering fails in 5 instead of
+        # consuming the whole budget and reporting as a cancellation.
+        timeout-minutes: 5
         with:
           distribution: Ubuntu-24.04
           use-cache: 'false'
