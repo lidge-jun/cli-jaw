@@ -98,13 +98,25 @@ for (const scriptPath of ['scripts/release-preview.sh']) {
         const flat = script.replace(/\\\r?\n\s*/g, ' ').replace(/[ \t]+/g, ' ');
 
         assert.ok(
-            flat.includes('gh run list --workflow test.yml --branch preview --commit "$RELEASE_SHA" --event push --status success'),
+            flat.includes('wait_for_preview_run test.yml Tests push'),
             'release script must wait for a successful PUSH run of test.yml on the exact release SHA',
         );
         assert.ok(
-            flat.includes('gh run list --workflow postinstall-platform.yml --branch preview --commit "$RELEASE_SHA" --event push --status success'),
-            'release script must wait for a successful PUSH run of postinstall-platform.yml on the exact release SHA',
+            flat.includes('wait_for_preview_run postinstall-platform.yml "Postinstall Platform Checks" ""'),
+            'release script must wait for a successful run of postinstall-platform.yml on the exact release SHA',
         );
+        // Both waits resolve the run by the exact release SHA, and the budget bounds
+        // discovery rather than execution. The old fixed 1200s covered execution and
+        // gave up on v2.17.51-preview while both runs were still queued, minutes after
+        // the identical budget had stranded a promotion the same day.
+        assert.ok(
+            flat.includes('--commit "$RELEASE_SHA"'),
+            'the waiter must resolve runs by the exact release SHA',
+        );
+        const waiter = script.slice(script.indexOf('wait_for_preview_run() {'), script.indexOf('Waiting for preview Tests'));
+        assert.ok(waiter.includes('discovery_deadline'), 'the budget must bound discovery, not a running job');
+        assert.ok(waiter.includes('queued|in_progress'), 'a live run must keep the waiter polling');
+        assert.ok(/live.*-eq 0/s.test(waiter), 'a failed conclusion is terminal only when no live run remains');
 
         const waitIndex = script.indexOf('Waiting for preview Tests');
         // The real dispatch sits at column 0; the resume hint echoes an indented
@@ -117,16 +129,19 @@ for (const scriptPath of ['scripts/release-preview.sh']) {
             'release script must wait for release CI BEFORE dispatching publish.yml',
         );
 
-        // Mirrors the two wait loops in scripts/promote-to-main.sh.
-        assert.ok(script.includes('deadline=$((SECONDS + 1200))'), 'CI wait must be bounded by the same 1200s deadline as promote-to-main.sh');
-        assert.ok(script.includes('while [ "$SECONDS" -lt "$deadline" ]'), 'CI wait must poll against the deadline');
+        // Mirrors the waiter in scripts/promote-to-main.sh. Both scripts moved off a
+        // wall clock that covered execution: the budget now bounds only the window in
+        // which a run must APPEAR, because a run that exists carries its own
+        // timeout-minutes and a queue wait is not ours to cap.
+        assert.ok(script.includes('discovery_deadline=$((SECONDS + 1200))'), 'the 1200s budget must bound discovery, matching promote-to-main.sh');
+        assert.ok(!/while \[ "\$SECONDS" -lt "\$deadline" \]/.test(script), 'the old execution-bounding poll loop must be gone');
         assert.ok(script.includes('sleep 10'), 'CI wait must poll on the promote-to-main.sh interval');
         assert.ok(
             script.includes('failure|cancelled|timed_out|startup_failure|action_required'),
             'CI wait must abort on a failed conclusion instead of polling to the deadline',
         );
         assert.ok(
-            script.includes('[ -n "$PREVIEW_TESTS_URL" ] && break'),
+            script.includes('if [ -n "$url" ]; then printf %s "$url"; return 0; fi'),
             'CI wait must treat an empty result as "run not created yet" and keep polling',
         );
         assert.ok(

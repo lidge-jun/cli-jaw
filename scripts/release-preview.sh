@@ -293,38 +293,52 @@ else
   esac
 fi
 
+# Shared waiter. The budget bounds DISCOVERY only: it used to bound execution too,
+# at 1200s, which is shorter than the 1500s the windows-wsl job alone is allowed and
+# far shorter than a queue wait. On 2026-09-12 this gave up on v2.17.51-preview while
+# both runs were still sitting in `queued`, after the identical budget had already
+# stranded a promotion earlier the same day. Once a run for this SHA exists it
+# carries its own timeout-minutes, and that is the bound we respect.
+#
+# A failed or cancelled conclusion is terminal only when no live run remains: both
+# workflows set cancel-in-progress, so a superseded run leaves a cancelled row next
+# to its replacement.
+wait_for_preview_run() {
+  local workflow="$1" label="$2" event="${3:-push}" url="" states="" live="" failed=""
+  local -a event_filter=()
+  [ -n "$event" ] && event_filter=(--event "$event")
+  local discovery_deadline=$((SECONDS + 1200))
+  while :; do
+    url="$(gh run list \
+      --workflow "$workflow" \
+      --branch preview \
+      --commit "$RELEASE_SHA" \
+      "${event_filter[@]}" \
+      --status success \
+      --limit 1 --json url --jq '.[0].url // ""')"
+    if [ -n "$url" ]; then printf %s "$url"; return 0; fi
+    states="$(gh run list \
+      --workflow "$workflow" \
+      --branch preview \
+      --commit "$RELEASE_SHA" \
+      "${event_filter[@]}" \
+      --limit 20 --json status,conclusion --jq '.[] | "\(.status) \(.conclusion // "")"')"
+    live="$(printf '%s\n' "$states" | grep -c -E '^(queued|in_progress|waiting|requested|pending)' || true)"
+    failed="$(printf '%s\n' "$states" | grep -m1 -E '^completed (failure|cancelled|timed_out|startup_failure|action_required)$' || true)"
+    if [ -n "$failed" ] && [ "${live:-0}" -eq 0 ]; then
+      echo "ERROR: preview $label completed with ${failed#completed }" >&2
+      return 1
+    fi
+    if [ "${live:-0}" -eq 0 ] && [ "$SECONDS" -ge "$discovery_deadline" ]; then
+      echo "ERROR: no preview $label run appeared for $RELEASE_SHA within 1200s" >&2
+      return 1
+    fi
+    sleep 10
+  done
+}
+
 echo "⏳ Waiting for preview Tests on $RELEASE_SHA..."
-deadline=$((SECONDS + 1200))
-PREVIEW_TESTS_URL=""
-while [ "$SECONDS" -lt "$deadline" ]; do
-  PREVIEW_TESTS_URL="$(gh run list \
-    --workflow test.yml \
-    --branch preview \
-    --commit "$RELEASE_SHA" \
-    --event push \
-    --status success \
-    --limit 1 --json url --jq '.[0].url // ""')"
-  [ -n "$PREVIEW_TESTS_URL" ] && break
-  # An empty result also covers "GitHub has not materialised the run yet", which
-  # is the normal state for the first seconds after a push, so keep polling.
-  failed="$(gh run list \
-    --workflow test.yml \
-    --branch preview \
-    --commit "$RELEASE_SHA" \
-    --event push \
-    --status completed \
-    --limit 1 --json conclusion --jq '.[0].conclusion // ""')"
-  case "$failed" in
-    failure|cancelled|timed_out|startup_failure|action_required)
-      echo "ERROR: preview Tests completed with $failed" >&2
-      publish_dispatch_hint
-      exit 1
-      ;;
-  esac
-  sleep 10
-done
-if [ -z "$PREVIEW_TESTS_URL" ]; then
-  echo "ERROR: timed out waiting for successful preview Tests" >&2
+if ! PREVIEW_TESTS_URL="$(wait_for_preview_run test.yml Tests push)"; then
   publish_dispatch_hint
   exit 1
 fi
@@ -332,35 +346,10 @@ echo "✅ Tests: $PREVIEW_TESTS_URL"
 
 if [ "$PLATFORM_REQUIRED" = true ]; then
   echo "⏳ Waiting for preview Postinstall Platform Checks on $RELEASE_SHA..."
-  deadline=$((SECONDS + 1200))
-  PREVIEW_PLATFORM_URL=""
-  while [ "$SECONDS" -lt "$deadline" ]; do
-    PREVIEW_PLATFORM_URL="$(gh run list \
-      --workflow postinstall-platform.yml \
-      --branch preview \
-      --commit "$RELEASE_SHA" \
-      --event push \
-      --status success \
-      --limit 1 --json url --jq '.[0].url // ""')"
-    [ -n "$PREVIEW_PLATFORM_URL" ] && break
-    failed="$(gh run list \
-      --workflow postinstall-platform.yml \
-      --branch preview \
-      --commit "$RELEASE_SHA" \
-      --event push \
-      --status completed \
-      --limit 1 --json conclusion --jq '.[0].conclusion // ""')"
-    case "$failed" in
-      failure|cancelled|timed_out|startup_failure|action_required)
-        echo "ERROR: preview Postinstall Platform Checks completed with $failed" >&2
-        publish_dispatch_hint
-        exit 1
-        ;;
-    esac
-    sleep 10
-  done
-  if [ -z "$PREVIEW_PLATFORM_URL" ]; then
-    echo "ERROR: timed out waiting for successful preview Postinstall Platform Checks" >&2
+  # No event filter, matching publish.yml and require-release-evidence.mjs, which
+  # resolve the platform run by commit. Tests stays push-only because publish.yml
+  # accepts nothing else.
+  if ! PREVIEW_PLATFORM_URL="$(wait_for_preview_run postinstall-platform.yml "Postinstall Platform Checks" "")"; then
     publish_dispatch_hint
     exit 1
   fi
