@@ -64,6 +64,12 @@ import { applyOutputPolicy, loadPolicyHooksConfig } from '../core/policy-hooks.j
 import { setRecordPending } from '../core/policy-flags.js';
 import { parseHeartbeatReport, type HeartbeatReport } from './heartbeat-report.js';
 import {
+    foldRunRecord,
+    isHeartbeatJobFailing,
+    type HeartbeatRunOutcome,
+    type HeartbeatRunRecord,
+} from './heartbeat-run-record.js';
+import {
     describeHeartbeatSchedule,
     formatHeartbeatNow,
     getHeartbeatMinuteSlotKey,
@@ -107,6 +113,10 @@ interface PendingHeartbeatJob {
 const pendingJobs: PendingHeartbeatJob[] = [];
 type LiveDestinationHold = { destination: string; reason: HeartbeatHoldReason; observedAt: number };
 const liveDestinationHolds = new Map<string, LiveDestinationHold>();
+// What each job's last admitted tick did. Process-local on purpose for now: the
+// durable home is the anchor table and that schema work is its own unit. A record
+// that forgets on restart still beats today's nothing, and the API says so.
+const runRecords = new Map<string, HeartbeatRunRecord>();
 type HeartbeatDestinationJobRef = { id?: unknown; name?: unknown; destination?: unknown };
 
 function heartbeatJobKey(job: HeartbeatDestinationJobRef): string {
@@ -213,7 +223,20 @@ export function heartbeatRunSignal(): AbortSignal | undefined {
 }
 
 export function getHeartbeatRuntimeState() {
-    return pendingSnapshot();
+    return {
+        ...pendingSnapshot(),
+        // Jobs whose last ticks all failed or all refused. They keep their timers —
+        // this is visibility, not a kill switch.
+        failing: [...runRecords.entries()]
+            .filter(([, record]) => isHeartbeatJobFailing(record))
+            .map(([jobId]) => jobId),
+    };
+}
+
+/** The last admitted tick's outcome for a job, or undefined if it has not run in
+ *  this process. */
+export function getHeartbeatRunRecord(jobId: string): HeartbeatRunRecord | undefined {
+    return runRecords.get(jobId);
 }
 
 /** Milliseconds until the next boundary of `periodMs` measured from `anchor`.
@@ -320,6 +343,7 @@ export function startHeartbeat() {
     const liveKeys = new Set(jobs.map(job => heartbeatJobKey(job)).filter(Boolean));
     for (const id of [...intervalAnchors.keys()]) if (!liveIds.has(id)) intervalAnchors.delete(id);
     for (const id of [...heartbeatCronSlots.keys()]) if (!liveIds.has(id)) heartbeatCronSlots.delete(id);
+    for (const id of [...runRecords.keys()]) if (!liveIds.has(id)) runRecords.delete(id);
     for (const key of [...liveDestinationHolds.keys()]) if (!liveKeys.has(key)) liveDestinationHolds.delete(key);
     const n = heartbeatTimers.size;
     log.info(`[heartbeat] ${n} job${n !== 1 ? 's' : ''} active`);
@@ -733,6 +757,10 @@ export async function runHeartbeatJob(job: Record<string, any>, deps: HeartbeatJ
         forgetPendingJob(jobId);
     }
     if (!heartbeatAbort) heartbeatAbort = new AbortController();
+    const startedAt = Date.now();
+    // Deliberately `error`: a path that leaves without naming its outcome is a bug,
+    // and a record saying so is more useful than one quietly claiming success.
+    let outcome: HeartbeatRunOutcome = { execution: 'error', delivery: 'not_requested', reason: 'no outcome recorded' };
     try {
         // A mention watch replaces the prompt path entirely: its prompt describes
         // how to answer a message that has not been found yet, so running it bare
@@ -742,9 +770,17 @@ export async function runHeartbeatJob(job: Record<string, any>, deps: HeartbeatJ
         if (watch != null) {
             if (!isHeartbeatMentionWatch(watch)) {
                 log.error(`[heartbeat:${job["name"]}] invalid mention watch — not run`);
+                outcome = { execution: 'skipped', delivery: 'not_requested', reason: 'invalid_mention_watch' };
                 return;
             }
-            await runMentionWatchJob(job, watch);
+            // The boolean was already returned and already discarded. It is the only
+            // thing that separates a watch that ran from one that refused for a
+            // reason of its own — a disabled Slack, a quarantined ledger, an
+            // unverifiable workspace — so it stops being thrown away here.
+            const ran = await runMentionWatchJob(job, watch);
+            outcome = ran
+                ? { execution: 'ok', delivery: 'not_requested' }
+                : { execution: 'skipped', delivery: 'not_requested', reason: 'mention_watch_not_runnable' };
             return;
         }
         // Resolve and, for a Slack thread, prove the destination BEFORE spending
@@ -758,6 +794,7 @@ export async function runHeartbeatJob(job: Record<string, any>, deps: HeartbeatJ
         if (destinationBinding.state === 'held') {
             updateHeartbeatLiveDestinationHold(job, destinationBinding.reason);
             log.error(`[heartbeat:${job["name"]}] refuse: ${destinationBinding.reason} — ${heartbeatHoldMessage(destinationBinding.reason)}`);
+            outcome = { execution: 'skipped', delivery: 'not_requested', reason: destinationBinding.reason };
             return;
         }
         updateHeartbeatLiveDestinationHold(job, null);
@@ -793,6 +830,7 @@ export async function runHeartbeatJob(job: Record<string, any>, deps: HeartbeatJ
             );
             if (!guarded.ok) {
                 log.error(`[heartbeat:${job["name"]}] refuse: slack_grant_unavailable — employee authority could not be reserved`);
+                outcome = { execution: 'skipped', delivery: 'not_requested', reason: 'slack_grant_unavailable' };
                 return;
             }
             rawResult = guarded.value;
@@ -809,6 +847,7 @@ export async function runHeartbeatJob(job: Record<string, any>, deps: HeartbeatJ
             });
             if (!guarded.ok) {
                 log.error(`[heartbeat:${job["name"]}] refuse: slack_grant_unavailable — script authority could not be reserved`);
+                outcome = { execution: 'skipped', delivery: 'not_requested', reason: 'slack_grant_unavailable' };
                 return;
             }
             const scriptReport = guarded.value;
@@ -831,6 +870,7 @@ export async function runHeartbeatJob(job: Record<string, any>, deps: HeartbeatJ
             const first = await collect();
             if (!first) {
                 log.error(`[heartbeat:${job["name"]}] refuse: slack_grant_unavailable — destination-bound Slack authority could not be reserved`);
+                outcome = { execution: 'skipped', delivery: 'not_requested', reason: 'slack_grant_unavailable' };
                 return;
             }
             const collected = first.data.agyPlannerOnly === true
@@ -838,6 +878,7 @@ export async function runHeartbeatJob(job: Record<string, any>, deps: HeartbeatJ
                 : first;
             if (!collected) {
                 log.error(`[heartbeat:${job["name"]}] refuse: slack_grant_unavailable — retry authority could not be reserved`);
+                outcome = { execution: 'skipped', delivery: 'not_requested', reason: 'slack_grant_unavailable' };
                 return;
             }
             rawResult = String(collected.text);
@@ -848,6 +889,7 @@ export async function runHeartbeatJob(job: Record<string, any>, deps: HeartbeatJ
         const extraQuietMarkers = quietConfig?.enabled ? (quietConfig.markers || []) : [];
         if (isHeartbeatQuietOutput(result, extraQuietMarkers)) {
             log.info(`[heartbeat:${job["name"]}] silent`);
+            outcome = { execution: 'ok', delivery: 'suppressed' };
             return;
         }
 
@@ -867,7 +909,11 @@ export async function runHeartbeatJob(job: Record<string, any>, deps: HeartbeatJ
         const sendResult = !decision.send
             ? { ok: true as const }
             : await sendChannelOutput({ channel: destinationBinding.target.channel, type: 'text', text: formatted,
-                target: destinationBinding.target, allowActiveFallback: false });
+                target: destinationBinding.target, allowActiveFallback: false })
+                // A transport that THROWS is still a delivery failure, not a failed
+                // job. Without this it lands in the catch below beside a crashed
+                // runner and counts against the execution streak.
+                .catch((error: unknown) => ({ ok: false as const, error: (error as Error).message }));
         if (!sendResult.ok) {
             log.error(`[heartbeat:${job["name"]}] send failed: ${sendResult.error}`);
         }
@@ -886,11 +932,30 @@ export async function runHeartbeatJob(job: Record<string, any>, deps: HeartbeatJ
                 log.error(`[heartbeat:${job["name"]}] anchor save failed:`, (e as Error).message);
             }
         }
+        // Delivery is decided here, from the decision and the result, rather than
+        // hung on a line further up. A job whose policy says stay quiet synthesizes
+        // `{ ok: true }` WITHOUT sending, so reading success off that would file a
+        // tick that posted nothing as delivered.
+        outcome = {
+            execution: 'ok',
+            delivery: !decision.send ? 'not_requested' : sendResult.ok ? 'delivered' : 'not_delivered',
+            ...(sendResult.ok ? {} : { reason: 'send_failed' }),
+        };
     } catch (err) {
         log.error(`[heartbeat:${job["name"]}] error:`, (err as Error).message);
+        outcome = { execution: 'error', delivery: 'not_requested', reason: (err as Error).message };
     } finally {
         heartbeatBusy = false;
         if (jobId) inFlightJobs.delete(jobId);
+        if (jobId) {
+            const record = foldRunRecord(runRecords.get(jobId), {
+                jobId, startedAt, finishedAt: Date.now(),
+                superseded: generation !== heartbeatGeneration,
+                ...outcome,
+            });
+            runRecords.set(jobId, record);
+            broadcast('heartbeat_run', record);
+        }
         // A superseded run must not hand work to the next one. Draining here after
         // stopHeartbeat would replay jobs from a configuration the operator has
         // already replaced, which is exactly what made stop look advisory.

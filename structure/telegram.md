@@ -570,6 +570,7 @@ Mounted at `/api/dashboard/telegram-hub` (`loopbackOnly` middleware).
 | `getHeartbeatIntervalAnchor(jobId)` | 그 작업의 인터벌 격자 기준 시각 (진단/검증용) |
 | `stopHeartbeat()` | 세대 증가 + abort + 대기 큐 비우기 + 타이머 해제 (cron 슬롯은 유지) |
 | `runHeartbeatJob(job)` | 단일 작업 실행 (in-flight skip + busy guard + 세대 포착) |
+| `getHeartbeatRunRecord(jobId)` | 그 작업의 마지막 **승인된** 틱 결과 (프로세스 로컬) |
 | `drainPending()` | 대기 큐 1건 실행 — 스케줄이 해제된 상태에서는 아무것도 하지 않는다 |
 | `watchHeartbeatFile()` | fs.watch debounce — 파일 변경시 재로드 |
 
@@ -607,6 +608,24 @@ Mounted at `/api/dashboard/telegram-hub` (`loopbackOnly` middleware).
   비활성화했다 다시 켠 작업은 리듬을 유지해야 한다.
 - mention watch 틱은 스케줄러의 `AbortSignal`을 받는다. 이미 `deps.signal`을 읽고
   `stoppedBecause: 'aborted'`를 보고하던 경로가 이제 실제로 연결돼 있다.
+- 승인된 틱은 **반드시 하나의 run record** 를 남긴다. `execution`(`ok`/`error`/`skipped`)과
+  `delivery`(`delivered`/`not_delivered`/`suppressed`/`not_requested`)를 분리한다 —
+  "모델이 끝났다" 와 "수신자가 받았다" 는 다른 주장이고, 합치면 초록색 실행이 증거로서
+  의미를 잃는다. 전송 실패는 `execution: 'ok'` 이고 실패 streak 를 올리지 않는다.
+  전송이 **예외를 던져도** delivery 실패로 분류한다 — 그러지 않으면 크래시한 러너와
+  같은 catch 에 떨어져 작업 탓이 된다.
+- 카운터는 둘이다. `consecutiveFailures`(error)와 `consecutiveSkips`(skipped). 매 틱
+  거부하는 작업 — 검증 불가한 workspace, 예약되지 않는 grant — 은 streak 0 에 머물러
+  영원히 안 보이게 되기 때문이다. 임계값(5)에 닿으면 `getHeartbeatRuntimeState().failing`
+  에 나타난다. **타이머는 끄지 않는다** — live destination hold 와 같은 이유로, 조용히
+  멈추는 것이 #745 가 막으려던 실패다.
+- 세대가 교체된(superseded) 실행은 결과를 기록하되 두 카운터를 그대로 통과시킨다.
+  뒤늦은 `ok` 가 streak 를 리셋하거나 abort 후 throw 가 올리는 것은, 운영자가 이미 바꾼
+  설정을 서술하는 일이다.
+- 승인 **이전** 의 이탈(이미 실행 중·busy·agent busy)은 기록하지 않는다. 그건 실행이
+  아니고, 이미 `heartbeat_pending` 으로 방송되며, 기록하면 진짜 실행의 결과를 덮는다.
+- 기록은 프로세스 로컬이다. 재시작하면 잊는다. 영속화는 anchor 스키마를 건드리는
+  별도 유닛이다.
 - 실행 프롬프트 앞에는 memory search 지시가 자동으로 붙는다
 - 결과 전송은 작업에 바인딩된 목적지로만 간다. 활성 채널로 보내는 경로는 없다 —
   목적지는 완결돼 있거나 보류되며, 자세한 규칙은 이 문서 위쪽
