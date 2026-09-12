@@ -121,6 +121,14 @@ export type MentionScanResult = {
      *  `resumeBounds` next tick. Surfaced so a caller can tell "caught up" from
      *  "still draining". */
     truncated: boolean;
+    /** True when the global hit cap stopped the channel loop.
+     *
+     *  Separate from `truncated` because it is a different fact and the two
+     *  together are what "caught up" actually requires. The cap breaks out of the
+     *  loop WITHOUT touching `truncated`, so a busy morning of five hits leaves
+     *  later channels unread while `truncated` stays false — a caller reading that
+     *  flag alone would report caught-up over an unread backlog. */
+    hitCapReached: boolean;
     /** Channel ids beyond MENTION_WATCH_MAX_CHANNELS, which this tick did not
      *  read. Reported rather than dropped in silence: a channel an operator
      *  believes is watched but is not is the failure this whole feature exists to
@@ -236,11 +244,15 @@ export async function scanSlackMentions(
     // `/api/slack/history` path into the same wall, so the tick stops and the
     // untouched channels wait — their cursors did not move, so nothing is lost.
     let rateLimited = false;
+    // Set where the cap actually stops the loop, not inferred from hits.length:
+    // a scan that ends with exactly maxHits because that is all there was is not
+    // the same as one cut short.
+    let hitCapReached = false;
 
     for (const channelId of channels) {
         if (options.signal?.aborted) break;
         if (rateLimited) break;
-        if (hits.length >= maxHits) break;
+        if (hits.length >= maxHits) { hitCapReached = true; break; }
         lastChannelId = channelId;
         const from = options.state.cursor(channelId) ?? options.since;
 
@@ -365,5 +377,5 @@ export async function scanSlackMentions(
         if (frontier) cursors.set(channelId, frontier);
     }
 
-    return { hits, cursors, resumeBounds, lastChannelId, failed, truncated, rateLimited, overflowChannels };
+    return { hits, cursors, resumeBounds, lastChannelId, failed, truncated, hitCapReached, rateLimited, overflowChannels };
 }

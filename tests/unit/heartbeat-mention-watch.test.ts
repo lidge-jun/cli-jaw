@@ -284,3 +284,143 @@ test('nothing found means the agent is never invoked', async () => {
     assert.equal(result.answered, 0);
     assert.equal(recorder.asked.length, 0, 'the agent was invoked with no mentions to answer');
 });
+
+// ─── wp4: a bounded tick, and drain state the scanner already knew ───
+//
+// The answering loop is a loop of orchestrator turns and `heartbeatBusy` is held
+// across all of it, so one busy morning queues every other heartbeat job behind
+// it. MWB-003 is a guard against a REJECTED design rather than a red-today test:
+// an audit caught that clocking the whole tick would let a slow scan — 2s pacing
+// across up to 60 channels and 4 windows — expire the budget having answered
+// nothing. It is kept because that mistake is easy to reintroduce.
+
+const CHANNEL_B = 'C0BDW33069Q';
+
+/** A history fetch whose reads advance a shared clock, standing in for the pacing
+ *  sleeps and HTTP the real scan spends before any answering happens. */
+function slowHistoryFetch(
+    byChannel: Record<string, Array<{ ts: string; text: string; user?: string }>>,
+    clock: { at: number },
+    costMs: number,
+) {
+    const impl = (async (_url: string, init?: { body?: unknown }) => {
+        const params = new URLSearchParams(String(init?.body ?? ''));
+        const channel = params.get('channel') || '';
+        const oldest = params.get('oldest') || undefined;
+        clock.at += costMs;
+        const all = byChannel[channel] ?? [];
+        const inRange = all.filter(m => (oldest ? Number(m.ts) > Number(oldest) : true));
+        return {
+            ok: true, status: 200, headers: { get: () => null },
+            text: async () => JSON.stringify({
+                ok: true,
+                messages: [...inRange].sort((a, b) => Number(b.ts) - Number(a.ts)),
+                has_more: false,
+            }),
+        };
+    }) as unknown as typeof fetch;
+    return impl;
+}
+
+/** Always more history, with a descending window, so the backward walk spends its
+ *  per-channel budget and the scan reports an unfinished walk. */
+function endlessHistoryFetch() {
+    let floor = 900;
+    const impl = (async (_url: string, init?: { body?: unknown }) => {
+        const params = new URLSearchParams(String(init?.body ?? ''));
+        const latest = params.get('latest');
+        const top = latest ? Number(latest) : floor;
+        floor = top - 1;
+        return {
+            ok: true, status: 200, headers: { get: () => null },
+            text: async () => JSON.stringify({
+                ok: true,
+                messages: [{ ts: (top - 0.5).toFixed(6), text: '잡담', user: 'U0BME0C36SV' }],
+                has_more: true,
+            }),
+        };
+    }) as unknown as typeof fetch;
+    return impl;
+}
+
+test('MWB-001 an expired answer budget stops the tick BEFORE spending a turn', async () => {
+    const { id, ns } = job('mw_budget_stop');
+    const clock = { at: 1_000 };
+    const { impl } = historyFetch({
+        [CHANNEL]: [
+            { ts: '700.000100', text: MENTION + ' 첫 번째', user: 'U0BME0C36SV' },
+            { ts: '700.000200', text: MENTION + ' 두 번째', user: 'U0BME0C36SV' },
+        ],
+    });
+    const { deps: d, recorder } = deps(impl, {
+        now: () => clock.at,
+        answerBudgetMs: 0,
+    });
+    const result = await runMentionWatchTick(ns, { id, name: id }, watchConfig(), d);
+
+    assert.equal(result.stoppedBecause, 'budget');
+    assert.equal(result.answered, 0);
+    assert.equal(recorder.asked.length, 0, 'an expired budget must cost zero agent turns');
+});
+
+test('MWB-002 a budget break leaves no receipt, so the next tick retries it', async () => {
+    const { id, ns } = job('mw_budget_retry');
+    const clock = { at: 1_000 };
+    const { impl } = historyFetch({
+        [CHANNEL]: [{ ts: '710.000100', text: MENTION + ' 답해줘', user: 'U0BME0C36SV' }],
+    });
+    const { deps: d } = deps(impl, { now: () => clock.at, answerBudgetMs: 0 });
+    await runMentionWatchTick(ns, { id, name: id }, watchConfig(), d);
+
+    assert.equal(hasSeenMention(ns, CHANNEL, '710.000100'), false, 'an unanswered hit must keep no receipt');
+    const cursor = readCursor(ns, CHANNEL) as { lastTs?: string };
+    assert.notEqual(cursor?.lastTs, '710.000100', 'the cursor must not pass an unanswered mention');
+});
+
+test('MWB-003 the budget clocks the answering phase, not the scan', async () => {
+    // A scan far more expensive than the whole budget still answers its first hit,
+    // because the allowance is for answering. Charging the scan to it would end
+    // the tick having done nothing while the rotation anchor had already moved.
+    const { id, ns } = job('mw_budget_scanclock');
+    const clock = { at: 1_000 };
+    const impl = slowHistoryFetch(
+        { [CHANNEL]: [{ ts: '720.000100', text: MENTION + ' 안녕', user: 'U0BME0C36SV' }] },
+        clock,
+        20 * 60_000,
+    );
+    const { deps: d, recorder } = deps(impl, { now: () => clock.at, answerBudgetMs: 10 * 60_000 });
+    const result = await runMentionWatchTick(ns, { id, name: id }, watchConfig(), d);
+
+    assert.equal(result.answered, 1);
+    assert.equal(result.stoppedBecause, undefined);
+    assert.equal(recorder.asked.length, 1);
+});
+
+test('MWB-004 an unfinished walk reaches the tick result as scanIncomplete', async () => {
+    const { id, ns } = job('mw_scan_incomplete');
+    const { deps: d } = deps(endlessHistoryFetch());
+    const result = await runMentionWatchTick(ns, { id, name: id }, watchConfig(), d);
+
+    assert.equal(result.scanIncomplete, true, 'the scanner computed this and the tick used to drop it');
+    assert.equal(result.hitCapReached, false);
+});
+
+test('MWB-005 the hit cap is reported separately, because scanIncomplete stays false', async () => {
+    // Five hits on a busy morning leave later channels unread while the unfinished-walk
+    // flag says nothing at all. Reading caught-up off that flag alone would be a new
+    // false claim, which is the reason this second flag exists.
+    const { id, ns } = job('mw_hit_cap');
+    const { impl } = historyFetch({
+        [CHANNEL]: [{ ts: '730.000100', text: MENTION + ' 하나', user: 'U0BME0C36SV' }],
+        [CHANNEL_B]: [{ ts: '731.000100', text: MENTION + ' 둘', user: 'U0BME0C36SV' }],
+    });
+    const { deps: d } = deps(impl, { allowlist: [CHANNEL, CHANNEL_B] });
+    const result = await runMentionWatchTick(
+        ns, { id, name: id },
+        watchConfig({ channelIds: [CHANNEL, CHANNEL_B], maxHits: 1 }),
+        d,
+    );
+
+    assert.equal(result.hitCapReached, true);
+    assert.equal(result.scanIncomplete, false, 'the cap does not set the unfinished-walk flag');
+});

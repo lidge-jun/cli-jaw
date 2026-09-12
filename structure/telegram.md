@@ -608,6 +608,19 @@ Mounted at `/api/dashboard/telegram-hub` (`loopbackOnly` middleware).
   비활성화했다 다시 켠 작업은 리듬을 유지해야 한다.
 - mention watch 틱은 스케줄러의 `AbortSignal`을 받는다. 이미 `deps.signal`을 읽고
   `stoppedBecause: 'aborted'`를 보고하던 경로가 이제 실제로 연결돼 있다.
+- mention watch 틱에는 **답변 단계 wall-clock 예산**(10분)이 있다. 틱 전체가 아니라
+  스캔이 끝난 시점부터 잰다 — 스캔은 60채널 × 4윈도우 × 2초 페이싱으로 정당하게 수 분을
+  자므로, 전체 틱 기준이면 답변 0건으로 예산이 만료될 수 있다. 예산은 **시작되는 것**을
+  제한하지 총 시간을 제한하지 않는다: 1밀리초 남기고 승인된 답변은 자기 idle 상한까지
+  돌기 때문에 정직한 최악은 예산 + 1턴이다. 검사는 `deps.answer` **앞**에 있어서
+  만료된 예산은 에이전트 턴을 한 번도 쓰지 않는다. 답 못 한 hit 은 receipt 을 남기지
+  않으므로 다음 틱이 가져간다.
+- 틱 결과는 스캐너가 계산해 놓고 버려지던 두 신호를 싣는다. `scanIncomplete` 는 "어떤
+  채널의 역방향 walk 이 커서까지 못 갔다" 이며 **backlog 가 아니다** — 윈도우 예산 소진,
+  429, 네트워크 오류, abort, 진행 불가 페이지 전부 포함한다. `hitCapReached` 는 전역
+  hit 상한이 채널 루프를 끊은 경우로, 이때 `scanIncomplete` 는 **false 로 남는다**.
+  따라서 "다 따라잡았다" 는 둘 다 false 일 때만 참이다. 불리언 하나가 조용히 두 가지를
+  뜻하게 만든 것이 원래 `truncated` 를 못 쓰게 만든 이유다.
 - 승인된 틱은 **반드시 하나의 run record** 를 남긴다. `execution`(`ok`/`error`/`skipped`)과
   `delivery`(`delivered`/`not_delivered`/`suppressed`/`not_requested`)를 분리한다 —
   "모델이 끝났다" 와 "수신자가 받았다" 는 다른 주장이고, 합치면 초록색 실행이 증거로서
