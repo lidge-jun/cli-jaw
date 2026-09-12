@@ -110,12 +110,21 @@ async function run(input = 'EXAMPLE_READY_V1 task', overrides: Partial<SlackMess
 const bodies = () => calls.filter(call => call.method === 'chat.postMessage');
 const reactions = (name: string) => calls.filter(call => call.method === 'reactions.add' && call.body['name'] === name);
 async function flush(context: TestContext) {
-    for (let i = 0; i < 30; i++) await Promise.resolve();
+    // Ingress is queued on a microtask, but prepareSlackWorkflow then awaits
+    // real fs I/O (realpath/open/stat/read) and ACK uses fetch. A fixed
+    // microtask spin can finish before those poll/check callbacks run.
+    await Promise.resolve();
     context.mock.timers.tick(0);
     await new Promise<void>(resolve => setImmediate(resolve));
 }
 async function until(context: TestContext, condition: () => boolean) {
-    for (let i = 0; i < 100; i++) { await flush(context); if (condition()) return; }
+    // Date/setTimeout are fake-timer APIs in this file; use real monotonic
+    // time so the deadline still advances while I/O is in flight.
+    const deadline = performance.now() + 2_000;
+    while (performance.now() < deadline) {
+        await flush(context);
+        if (condition()) return;
+    }
     assert.fail(`Condition not observed: ${JSON.stringify({ calls, admissions, collections, finishes })}`);
 }
 async function holdEnvelopeIngress(context: TestContext): Promise<() => void> {
