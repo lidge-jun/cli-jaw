@@ -44,7 +44,14 @@ test('heartbeat defers while the main agent is busy', () => {
 
 test('heartbeat drain respects main-agent and user-queue priority', () => {
     const drainIdx = heartbeatSrc.indexOf('export async function drainPending');
-    const drainBlock = heartbeatSrc.slice(drainIdx, drainIdx + 500);
+    // The window used to be a fixed 500 characters, which measured byte distance
+    // rather than the function: adding a comment inside drainPending pushed the
+    // shift() call out of range and failed a test whose subject had not changed.
+    // Slice to the next top-level declaration instead.
+    const afterDrain = heartbeatSrc.indexOf('\nfunction ', drainIdx);
+    const afterDrainExport = heartbeatSrc.indexOf('\nexport ', drainIdx + 1);
+    const ends = [afterDrain, afterDrainExport].filter(i => i > drainIdx);
+    const drainBlock = heartbeatSrc.slice(drainIdx, ends.length ? Math.min(...ends) : heartbeatSrc.length);
 
     assert.ok(heartbeatSrc.includes("import { hasPendingWorkerReplays } from '../orchestrator/worker-registry.js'"));
     assert.ok(drainIdx > -1, 'drainPending must exist');
