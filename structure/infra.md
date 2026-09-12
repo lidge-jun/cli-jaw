@@ -442,6 +442,26 @@ preview**. It then fast-forwards `preview` to that commit, waits for `test.yml`
 green **on that exact SHA**, re-checks that live `preview` still equals it, and
 fast-forwards `main` to the same commit with a plain non-force push.
 
+The wait is not a wall clock over execution. `wait_for_run` spends its 1200s
+budget only while no run for the SHA has appeared; once one is queued or running
+it is followed for its own lifetime, because the `windows-wsl` job alone may take
+25 minutes and the old fixed budget was shorter than that. A failed or cancelled
+conclusion is terminal only when no live run remains for the SHA: both workflows
+set `cancel-in-progress`, so a superseded run leaves a cancelled row beside its
+replacement. The platform lookup carries no `--event` filter, matching
+`publish.yml` and `require-release-evidence.mjs`, which resolve it by commit; the
+Tests lookup stays push-only because `publish.yml` accepts nothing else.
+
+Because the script writes to the remote before it is finished, it can be
+interrupted with `preview` already carrying the stable bump and `main` behind.
+`scripts/promotion-state.mjs` classifies that state (`prerelease`, `resume`,
+`already_on_main`, `refuse`) and a re-run resumes: it takes the commit `preview`
+already holds and skips both the version bump and the preview push, so a tree CI
+has certified is never replaced by a same-version copy. `resume` requires the
+full fingerprint — `main` an ancestor, the parent the matching prerelease, the
+subject `chore: promote vX.Y.Z`, and a diff touching only the four version
+manifests — and anything else is refused rather than guessed at.
+
 There is no PR and no squash (#480). `main` and `preview` end up on the SAME
 commit, which is why the ancestry guard keeps holding on the next cycle.
 

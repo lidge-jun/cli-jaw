@@ -561,13 +561,14 @@ Mounted at `/api/dashboard/telegram-hub` (`loopbackOnly` middleware).
 
 ---
 
-## memory/heartbeat.ts — Scheduled Jobs (205L)
+## memory/heartbeat.ts — Scheduled Jobs (891L)
 
 | Function | 역할 |
 | --- | --- |
 | `startHeartbeat()` | cron-like 주기 작업 시작 |
-| `stopHeartbeat()` | 작업 중지 |
-| `runHeartbeatJob(job)` | 단일 작업 실행 (busy guard) |
+| `stopHeartbeat()` | 세대 증가 + abort + 대기 큐 비우기 + 타이머 해제 (cron 슬롯은 유지) |
+| `runHeartbeatJob(job)` | 단일 작업 실행 (in-flight skip + busy guard + 세대 포착) |
+| `drainPending()` | 대기 큐 1건 실행 — 스케줄이 해제된 상태에서는 아무것도 하지 않는다 |
 | `watchHeartbeatFile()` | fs.watch debounce — 파일 변경시 재로드 |
 
 ### 의존 모듈
@@ -579,9 +580,23 @@ Mounted at `/api/dashboard/telegram-hub` (`loopbackOnly` middleware).
 - 설정: `~/.cli-jaw/heartbeat.json`
 - 각 작업: `id`, `name`, `enabled`, `schedule`, `prompt`
 - `schedule`은 `{ kind: 'every', minutes }` 또는 `{ kind: 'cron', cron, timeZone? }`
-- busy guard: 이전 작업 실행 중이면 버리지 않고 `pendingJobs` 큐에 넣는다
+- busy guard: 다른 작업이 실행 중이면 버리지 않고 `pendingJobs` 큐에 넣는다. 단 **같은**
+  작업이 이미 실행 중이면 큐에 넣지 않고 건너뛴다 — 큐에 넣으면 끝나는 실행의 `finally`가
+  그 사본을 다시 실행해 같은 보고가 두 번 전달됐다.
+- 실행이 받아들여지는 시점에 그 작업의 대기 사본은 제거된다. PABCD 중 연기된 틱은 이후의
+  정상 틱이 수행한 것으로 충족된 것이므로 다시 재생하지 않는다.
+- `stopHeartbeat()`는 세대를 올리고 진행 중인 실행을 abort 하며 대기 큐를 비운다. 세대가
+  바뀐 실행은 전송·앵커·ledger 기록과 drain을 수행하지 않는다. `drainPending()`은 외부
+  (`orchestrator/pipeline`, `routes/orchestrate`, `cli/handlers-runtime`, `agent/spawn/queue`)
+  에서도 호출되므로, 타이머가 없으면 스스로 아무 일도 하지 않는다.
+- cron 슬롯 맵은 재로드를 넘어 살아남는다. `startHeartbeatCronLoop`가 arm 즉시 현재 분을
+  실행하므로, 슬롯을 비우면 저장 + 파일 감시 재빌드로 같은 분이 두 번 발사된다.
+- mention watch 틱은 스케줄러의 `AbortSignal`을 받는다. 이미 `deps.signal`을 읽고
+  `stoppedBecause: 'aborted'`를 보고하던 경로가 이제 실제로 연결돼 있다.
 - 실행 프롬프트 앞에는 memory search 지시가 자동으로 붙는다
-- 결과 전송은 Telegram 고정이 아니라 `sendChannelOutput({ channel: 'active', ... })`를 통해 현재 활성 채널로 간다
+- 결과 전송은 작업에 바인딩된 목적지로만 간다. 활성 채널로 보내는 경로는 없다 —
+  목적지는 완결돼 있거나 보류되며, 자세한 규칙은 이 문서 위쪽
+  `heartbeat-destination.ts` 절에 있다.
 
 ---
 
