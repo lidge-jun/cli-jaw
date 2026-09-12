@@ -217,9 +217,29 @@ test('detection env carries exactly one PATH casing', () => {
  */
 const onWindows = process.platform === 'win32' ? test : test.skip;
 
+function assertWindowsLookupSucceeded(scan: ReturnType<typeof listCliBinaryCandidates>, name: string): void {
+    // Production already distinguishes "lookup failed" (scanError) from
+    // "the name is not installed" (empty candidates, no scanError). These
+    // host-gated cases used to ignore scanError and report a timeout as
+    // "node/npm is not discoverable", which is a false diagnosis.
+    //
+    // A lookup failure remains a hard failure: the runner still could not
+    // prove the binary is present. The assertion names the actual cause so
+    // CI does not send operators looking for a missing Node install.
+    assert.equal(
+        scan.scanError,
+        undefined,
+        `${name} lookup failed (${scan.scanError}); this is not evidence that ${name} is uninstalled`,
+    );
+    assert.ok(
+        scan.candidates.length > 0,
+        `${name} must be discoverable on a Windows runner`,
+    );
+}
+
 onWindows('where.exe discovery returns launchable candidates for node', () => {
     const scan = listCliBinaryCandidates('node');
-    assert.ok(scan.candidates.length > 0, 'node must be discoverable on a Windows runner');
+    assertWindowsLookupSucceeded(scan, 'node');
 
     for (const candidate of scan.candidates) {
         assert.match(candidate.path, /^[A-Za-z]:\\|^\\\\/, 'where.exe must return absolute Windows paths');
@@ -234,7 +254,7 @@ onWindows('where.exe discovery returns launchable candidates for node', () => {
 
 onWindows('a discovered npm shim survives the spawnability rules', () => {
     const scan = listCliBinaryCandidates('npm');
-    assert.ok(scan.candidates.length > 0, 'npm must be discoverable on a Windows runner');
+    assertWindowsLookupSucceeded(scan, 'npm');
     const spawnable = scan.candidates.filter((candidate) => candidate.spawnable);
     assert.ok(
         spawnable.length > 0,
