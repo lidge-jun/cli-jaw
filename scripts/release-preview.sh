@@ -169,7 +169,19 @@ echo "🖥️  Syncing Electron version to $VERSION..."
 node scripts/sync-electron-version.cjs
 
 echo "🔎 Type checking..."
-pnpm exec tsc --noEmit
+# npm, not pnpm. Every other step in this script — build, build:frontend, the
+# electron prefix commands, gate:all, pack — runs through npm, CI installs with
+# `npm ci`, and promote-to-main.sh never touches pnpm. The lone `pnpm exec` was
+# the outlier, and it does not just run a binary: pnpm reconciles the tree
+# against pnpm-lock.yaml first, which on a host without node-gyp's toolchain
+# fails building better-sqlite3 from source. That happened AFTER the version
+# bump and BEFORE the gates, so the release aborted with the working tree
+# already carrying a bump and a half-migrated node_modules.
+#
+# The check itself is not lost: gate:all below runs gate:typecheck, which is
+# `tsc --noEmit` over both the server and the frontend project. This line stays
+# only to fail fast before the two builds.
+npm run typecheck
 
 echo "📦 Building backend..."
 npm run build
