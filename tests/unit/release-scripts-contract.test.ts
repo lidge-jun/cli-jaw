@@ -366,10 +366,24 @@ test('release branch policy is reflected in CI workflows, release script, instal
         read('docs/windows.html'),
     ].join('\n');
 
-    for (const workflow of [testWorkflow, postinstallWorkflow]) {
-        assert.ok(workflow.includes('- preview'), 'CI workflows must run on preview');
-        assert.ok(workflow.includes('- main'), 'CI workflows must run on main');
-        assert.ok(!workflow.includes('- master'), 'CI workflows must not run on removed master');
+    // Every branch assertion below is STRUCTURAL: it reads the push-trigger
+    // branch list rather than searching the file for a substring, so neither a
+    // comment mentioning a branch nor a path entry that happens to look like
+    // one can satisfy it.
+    const pushBranches = (workflow: string): Set<string> => {
+        const on = workflow.slice(workflow.indexOf('on:'), workflow.indexOf('pull_request:'));
+        const fromBranches = on.slice(on.indexOf('branches:'));
+        const pathsAt = fromBranches.indexOf('paths:');
+        const list = pathsAt >= 0 ? fromBranches.slice(0, pathsAt) : fromBranches;
+        return new Set([...list.matchAll(/^\s*- ([A-Za-z0-9._/-]+)$/gm)].map(match => match[1]!));
+    };
+
+    const testBranches = pushBranches(testWorkflow);
+    const platformBranches = pushBranches(postinstallWorkflow);
+
+    for (const [name, branches] of [['test.yml', testBranches], ['postinstall-platform.yml', platformBranches]] as const) {
+        assert.ok(branches.has('preview'), `${name} must run on preview`);
+        assert.ok(!branches.has('master'), `${name} must not run on removed master`);
     }
 
     // M0 (b029c67d5) barred '- dev' from both workflows because dev is not a
@@ -377,16 +391,57 @@ test('release branch policy is reflected in CI workflows, release script, instal
     // from preview/main, and promote-to-main.sh pins --branch preview. What M0
     // also cost was any CI at all for dev HEAD, which is how a241c6222 came to
     // carry live product code with zero check-runs (#521). So test.yml — and only
-    // test.yml — now runs on dev. The assertion is structural rather than a bare
-    // substring, so a comment mentioning '- dev' cannot satisfy it.
-    const testPushBranches = testWorkflow.slice(
-        testWorkflow.indexOf('on:'),
-        testWorkflow.indexOf('pull_request:'),
-    );
-    assert.ok(/^\s*- dev$/m.test(testPushBranches),
+    // test.yml — now runs on dev.
+    assert.ok(testBranches.has('dev'),
         'test.yml must run on dev so dev HEAD is never unverified (#521)');
-    assert.ok(!postinstallWorkflow.includes('- dev'),
-        'installer-surface certification stays on preview/main only');
+    assert.ok(!platformBranches.has('dev'),
+        'installer-surface certification never runs on dev');
+
+    // test.yml keeps its main run: branch protection on main requires the
+    // ci-aggregate check, and that is the workflow which produces it.
+    assert.ok(testBranches.has('main'),
+        'test.yml must run on main; branch protection requires its ci-aggregate check there');
+
+    // The platform workflow does NOT. Before #480 promotion squashed preview
+    // onto main, minting a NEW commit, so main genuinely had a sha no preview
+    // run covered and needed a run of its own. ff promotion ended that: main is
+    // now fast-forwarded onto the exact commit preview already certified, so a
+    // main push re-ran these jobs against a byte-identical tree. That bought no
+    // new signal about the code and doubled the release's exposure to
+    // runner-side failure — 729f0dca (`wsl.exe --update` answered 403) and
+    // 53eff414 (where.exe hit its discovery budget) both painted main red while
+    // the preview run for the SAME sha was green.
+    assert.ok(!platformBranches.has('main'),
+        'platform certification runs once, on preview; main is the same commit after #480');
+
+    // Dropping that trigger is only safe because every consumer resolves the
+    // platform run BY COMMIT. If any of them reverted to a branch filter naming
+    // main, the release would demand a run that no longer exists — and it would
+    // fail at publish time, after preview had already shipped. These three are
+    // the load-bearing half of removing the trigger, so they are asserted here
+    // rather than left as a comment.
+    const publishWorkflow = read('.github/workflows/publish.yml');
+    const platformLookup = publishWorkflow.slice(
+        publishWorkflow.indexOf('--workflow postinstall-platform.yml'),
+    ).slice(0, 400);
+    assert.ok(platformLookup.includes('--commit "$GITHUB_SHA"'),
+        'publish.yml must find the platform run by commit, not by branch');
+    assert.ok(!platformLookup.includes('--branch'),
+        'publish.yml must not filter the platform run by branch: only preview produces one');
+
+    const evidenceScript = read('scripts/require-release-evidence.mjs');
+    const evidenceLookup = evidenceScript.slice(
+        evidenceScript.indexOf("'postinstall-platform.yml'"),
+    ).slice(0, 400);
+    assert.ok(evidenceLookup.includes("'--commit', headSha"),
+        'release-evidence gate must find the platform run by commit, not by branch');
+    assert.ok(!evidenceLookup.includes("'--branch'"),
+        'release-evidence gate must not filter the platform run by branch');
+
+    assert.ok(
+        releaseScript.includes('wait_for_run postinstall-platform.yml "Postinstall Platform Checks" preview'),
+        'promotion must wait for the platform run on preview, the only branch that still produces one',
+    );
     assert.ok(pagesWorkflow.includes('branches: [main]'), 'Pages deploy must publish docs from main');
     assert.ok(!pagesWorkflow.includes('branches: [master]'), 'Pages deploy must not depend on master');
 
